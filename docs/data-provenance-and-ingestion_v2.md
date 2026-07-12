@@ -113,10 +113,10 @@ Here is the senior move, and it mirrors the `UnifiedSearchService` and SSO-relyi
 
 Concretely, a `MetadataIngestionService` interface:
 
-```java
-public interface MetadataIngestionService {
-    IngestedRecord resolveByDoi(String doi);        // real target: Crossref REST API
-    List<IngestedRecord> harvest(HarvestRequest r); // real target: OAI-PMH / aggregator feed
+```typescript
+interface MetadataIngestionService {
+  resolveByDoi(doi: string): Promise<IngestedRecord>;          // real target: Crossref REST API
+  harvest(request: HarvestRequest): Promise<IngestedRecord[]>; // real target: OAI-PMH / aggregator feed
 }
 ```
 

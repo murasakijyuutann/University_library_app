@@ -12,7 +12,9 @@ A companion relationship map (the text-first "ERD" pass) follows in a separate s
 
 ## 1. The Resource hierarchy
 
-The spine of the system. An abstract `Resource` with five concrete subtypes, mapped via JOINED inheritance — a shared base table plus one extension table per subtype. The whole point of the hierarchy is that the subtypes diverge: each has a genuinely different access contract, and that divergence is what the model exists to express.
+The spine of the system. An abstract `Resource` with five concrete subtypes, realized as a shared base table plus one extension table per subtype (a base `resource` row and one subtype row sharing the same id). The whole point of the hierarchy is that the subtypes diverge: each has a genuinely different access contract, and that divergence is what the model exists to express.
+
+> **Mapping note.** This is a six-table relational structure. In the current stack (Prisma, which has no table inheritance) it is *hand-modeled* — five 1:1 relations to `resource`, with the "subtype row shares the base row's id, created atomically" invariant owned by a service-layer transaction and a TypeScript discriminated union giving compile-time exhaustiveness across subtypes (see `project-structure.md §2.3` and `stack-decision.md §1/§2a`). The relational design below is independent of that mapping choice — it is the same schema whether an ORM generates it or it is authored by hand.
 
 ### Resource (abstract base)
 The common identity and descriptive metadata shared by everything searchable and holdable in the system. Carries `title`, `description`, `department`, timestamps, and a `resource_type` discriminator. Every subtype below shares this base row via a matching primary key.

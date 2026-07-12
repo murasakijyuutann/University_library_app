@@ -10,17 +10,17 @@ This document describes the deployment architecture and CI/CD reasoning as a des
 
 ### What the workload looks like
 
-The Spring Boot backend is a stateless, containerizable service (JWT-based auth means no server-side session state). It also runs scheduled background jobs in-process — `OverdueCheckScheduler`, `ReservationExpiryScheduler`, `EmbargoExpiryScheduler` — via `@Scheduled`.
+The NestJS (Node.js) backend is a stateless, containerizable service (JWT-based auth means no server-side session state). It also runs scheduled background jobs in-process — `OverdueCheckScheduler`, `ReservationExpiryScheduler`, `EmbargoExpiryScheduler` — via `@nestjs/schedule` `@Cron`.
 
 ### Why Fargate over raw EC2
 
 EC2 means owning the box: OS patching, manual security group management, instance failure recovery, sizing for peak load even though a project at this traffic scale rarely needs it. None of that operational burden teaches anything about *this domain* — it's generic sysadmin work layered on top of a software architecture project.
 
-Fargate removes the server entirely: define a task (container + CPU/memory), AWS runs it. For a stateless Spring Boot service this is a clean match — no idle box running 24/7, and the operational complexity that remains (Dockerfile, task definition, service config) is transferable infrastructure-as-code knowledge, directly relevant to the project.
+Fargate removes the server entirely: define a task (container + CPU/memory), AWS runs it. For a stateless NestJS service this is a clean match — no idle box running 24/7, and the operational complexity that remains (Dockerfile, task definition, service config) is transferable infrastructure-as-code knowledge, directly relevant to the project.
 
 ### The scheduled-job placement question
 
-Running `@Scheduled` jobs inside a long-lived Fargate service works, but is arguably not the architecturally cleanest fit — a scheduled job doesn't need a server sitting idle between executions. The more correct pattern is **EventBridge Scheduler triggering a Lambda or a one-off ECS task** per job run. For this project's scope, in-app `@Scheduled` is the accepted simplification — documented here as a known tradeoff, not an oversight.
+Running `@Cron` jobs inside a long-lived Fargate service works, but is arguably not the architecturally cleanest fit — a scheduled job doesn't need a server sitting idle between executions. The more correct pattern is **EventBridge Scheduler triggering a Lambda or a one-off ECS task** per job run. For this project's scope, in-app `@Cron` is the accepted simplification — documented here as a known tradeoff, not an oversight. (Node caveat: a single Node process runs schedulers on one event loop; if multiple Fargate tasks run, the schedulers must be guarded against double-firing — a distributed lock or single-scheduler task — the same double-run concern the blue/green section raises.)
 
 ---
 
@@ -36,7 +36,7 @@ Self-managing Postgres means owning backups, failover, patching, and connection 
 
 ### Connection pooling under ephemeral compute
 
-Fargate tasks scaling up or down each open new database connections; Postgres has a hard connection limit. **RDS Proxy** sits in front of RDS specifically to pool and reuse connections across ephemeral compute — directly relevant once the API is running as stateless, horizontally-scalable containers.
+Fargate tasks scaling up or down each open new database connections; Postgres has a hard connection limit, and Prisma holds its own per-instance connection pool — so multiple tasks multiply connections quickly. **RDS Proxy** sits in front of RDS specifically to pool and reuse connections across ephemeral compute — directly relevant once the API runs as stateless, horizontally-scalable containers each with a Prisma pool.
 
 ### Cost/correctness tradeoff, stated explicitly
 
@@ -52,7 +52,7 @@ Thesis PDF uploads (`Thesis.filePath`) and potentially digitized research report
 
 ### The pre-signed upload pattern
 
-The correct pattern: the backend generates a pre-signed S3 URL, the frontend uploads directly to S3 using that URL, and the backend stores only the resulting S3 key in `thesis.file_path`. Spring Boot never touches the file bytes — this avoids a 50MB multipart upload tying up application server resources for the duration of the transfer.
+The correct pattern: the backend generates a pre-signed S3 URL, the frontend uploads directly to S3 using that URL, and the backend stores only the resulting S3 key in `thesis.file_path`. The Node service never touches the file bytes — this avoids a 50MB multipart upload tying up the event loop for the duration of the transfer (doubly relevant on Node, where a blocked event loop stalls all concurrent requests, not just one thread).
 
 ### Embargo enforcement intersects with access control
 
@@ -86,11 +86,11 @@ This applies uniformly across environments: even the dev-only `MockIdentityProvi
 
 ### DNS and TLS — Route 53, ACM
 
-Route 53 for DNS; ACM for the TLS certificate attached to the ALB listener. If the Next.js frontend is deployed separately (e.g. on Vercel), it handles its own domain/TLS — but the backend API still needs its own subdomain (e.g. `api.<project-domain>`) with a real certificate, since the frontend makes HTTPS calls to it directly.
+Route 53 for DNS; ACM for the TLS certificate attached to the ALB listener. The frontend is a static Vite/React SPA — built to static assets and served from S3 behind CloudFront (its own ACM certificate at the edge), not a running server. The backend API still needs its own subdomain (e.g. `api.<project-domain>`) with a real certificate, since the SPA makes HTTPS calls to it directly.
 
 ### Logging and monitoring — CloudWatch
 
-Fargate ships container stdout/stderr to CloudWatch Logs by default; Spring Boot's logging (Logback) should be configured for structured JSON output so logs remain queryable. CloudWatch Alarms should cover, at minimum: ECS task health/restart count, RDS CPU/connection count, and a custom alarm tied to scheduler job execution — the `audit_log_entry` table provides a natural place to log scheduler runs, which CloudWatch can alarm against if an expected job doesn't fire.
+Fargate ships container stdout/stderr to CloudWatch Logs by default; the Nest logger should be configured for structured JSON output (e.g. `nestjs-pino`) so logs remain queryable. CloudWatch Alarms should cover, at minimum: ECS task health/restart count, RDS CPU/connection count, and a custom alarm tied to scheduler job execution — the `audit_log_entry` table provides a natural place to log scheduler runs, which CloudWatch can alarm against if an expected job doesn't fire.
 
 "How do you know if it's broken" is a fair question for any backend system — this layer exists specifically to have an answer.
 
@@ -108,8 +108,8 @@ The natural fit for `EmailNotificationService`'s actual delivery mechanism — A
                     └────────┬─────────┘
                              │
                     ┌────────▼──────────┐
-                    │  Next.js          │
-                    │  (Vercel)         │
+                    │  Vite/React SPA   │
+                    │  (S3 + CloudFront)│
                     └────────┬──────────┘
                              │ HTTPS
                     ┌────────▼─────────┐
@@ -118,7 +118,7 @@ The natural fit for `EmailNotificationService`'s actual delivery mechanism — A
                              │
                     ┌────────▼──────────────┐      ┌──────────────────┐
                     │  ECS Fargate          │◄─────┤  ECR (images)    │
-                    │  (Spring Boot)        │      └──────────────────┘
+                    │  (NestJS / Node)      │      └──────────────────┘
                     └──┬────────┬───────┬───┘              ▲
                        │        │       │                  │ push on deploy
           ┌────────────▼──┐  ┌──▼────┐  │          ┌───────┴───────────┐
@@ -160,22 +160,27 @@ jobs:
   backend-verify:
     steps:
       - checkout
-      - setup-java (21)
-      - run: mvn test
-      - run: mvn verify        # integration tests, see below
+      - setup-node (20)
+      - run: npm ci
+      - run: npm run test           # unit tests (Jest)
+      - run: npm run test:e2e       # integration tests, see below
 ```
 
-`mvn test` alone is insufficient here specifically. Domain logic lives in `AccessPolicyResolver` and the state machine services (`ThesisSubmissionService`, `ReservationQueueService`) — classes where a unit test with mocked repositories can pass while the real JPA mapping is subtly wrong. JOINED inheritance queries are a known source of "works with mocks, breaks against real Postgres" failures.
+Unit tests alone are insufficient here specifically. Domain logic lives in `AccessPolicyResolver` and the state-machine services (`ThesisSubmissionService`, `ReservationQueueService`) — providers where a test with a mocked Prisma client can pass while the real query is subtly wrong. The hand-modeled hierarchy (base + subtype rows joined by id, written in a `prisma.$transaction`) is a known source of "works with mocks, breaks against real Postgres" failures — a mocked client never exercises the actual join or the transaction's atomicity.
 
-This is where **Testcontainers** earns its place: spin up a real Postgres container during the pipeline run, execute Flyway migrations against it, and run integration tests that exercise the actual `resource` → `journal_article` → `journal_license` join chain. A unit test cannot catch an incorrect JOINED inheritance discriminator mapping — only a test against real Postgres can.
+This is where **Testcontainers for Node** (`@testcontainers/postgresql`) earns its place: spin up a real Postgres container during the pipeline run, apply Prisma migrations against it (`prisma migrate deploy`), and run integration tests that exercise the actual `resource` → `journal_article` → `journal_license` join chain and the base+subtype creation transaction. A mocked Prisma client cannot catch a broken hand-modeled-hierarchy write — only a test against real Postgres can.
 
-```java
-@Testcontainers
-class AccessPolicyResolverIntegrationTest {
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
-    // tests run against real schema, real joins, real constraints
-}
+```typescript
+// integration test — real Postgres via Testcontainers for Node
+let container: StartedPostgreSqlContainer;
+
+beforeAll(async () => {
+  container = await new PostgreSqlContainer('postgres:16').start();
+  // point Prisma at the container, run `prisma migrate deploy`
+  // tests then run against real schema, real joins, real constraints
+});
+
+afterAll(async () => { await container.stop(); });
 ```
 
 **Frontend job**
@@ -197,11 +202,11 @@ The typecheck step carries extra weight here: `ResourceSummaryDto` is a type-agn
 
 ### Stage 2 — Triggered on merge to main
 
-**The ordering problem.** Deploying new app code and running a new Flyway migration cannot happen simultaneously without risking a window where old code runs against new schema, or new code against old schema. The pipeline encodes ordering explicitly:
+**The ordering problem.** Deploying new app code and running a new Prisma migration cannot happen simultaneously without risking a window where old code runs against new schema, or new code against old schema. The pipeline encodes ordering explicitly:
 
 ```
 1. Build & push image to ECR (tagged with commit SHA, not "latest")
-2. Run Flyway migration against RDS
+2. Run `prisma migrate deploy` against RDS
 3. ONLY IF migration succeeds → update ECS service to new image
 4. Health check the new deployment
 5. ONLY IF healthy → mark deployment complete
@@ -210,18 +215,18 @@ The typecheck step carries extra weight here: `ResourceSummaryDto` is a type-agn
 
 **Why tag by commit SHA, not `latest`.** If step 5 fails and rollback is needed, "redeploy the previous version" must reference something concrete. `latest` is a moving target — by definition, latest *is* the broken thing at that point. The previous ECS task definition revision should reference the previous commit SHA's image explicitly.
 
-**Why migration-before-deploy, not the reverse.** Deploying new app code first — code expecting a column Flyway hasn't added yet — produces immediate runtime failures the moment a request hits that code path (e.g. `EmbargoExpiryScheduler` querying a column that doesn't exist). Migration-first guarantees the schema is always a superset of what any currently-running app version needs. This follows the standard "expand, don't contract" migration philosophy: new columns are added before old code stops needing the old shape, never the reverse.
+**Why migration-before-deploy, not the reverse.** Deploying new app code first — code expecting a column the migration hasn't added yet — produces immediate runtime failures the moment a request hits that code path (e.g. `EmbargoExpiryScheduler` querying a column that doesn't exist). Migration-first guarantees the schema is always a superset of what any currently-running app version needs. This follows the standard "expand, don't contract" migration philosophy: new columns are added before old code stops needing the old shape, never the reverse.
 
-**The health check gate, made concrete.** Spring Boot Actuator's `/actuator/health` endpoint should check more than JVM liveness:
+**The health check gate, made concrete.** A `/health` endpoint (via `@nestjs/terminus`) should check more than process liveness:
 
 ```yaml
-management:
-  endpoint:
-    health:
-      show-details: always
-  health:
-    db:
-      enabled: true    # verifies actual RDS connectivity, not just app liveness
+// health.controller.ts (Terminus)
+//   @Get('/health')
+//   check() {
+//     return this.health.check([
+//       () => this.db.pingCheck('database'),   // verifies real RDS connectivity,
+//     ]);                                        // not just process liveness
+//   }
 ```
 
 ECS's ALB target group health check hits this endpoint before routing real traffic to a new task. If DB connectivity fails, ECS does not cut traffic over, and the old task continues serving requests — making rollback automatic rather than something manually triggered after the fact.
@@ -238,7 +243,7 @@ ECS's ALB target group health check hits this endpoint before routing real traff
 
 ### What's deliberately absent from a naive pipeline, and why
 
-**Database migration rollback is not really a solvable problem, and that's stated explicitly rather than glossed over.** Flyway does not auto-generate down-migrations. Rolling back the application does not undo a schema change. This means migration scripts under `db/migration/` require more PR-stage scrutiny than ordinary application code — a bad migration is a more expensive mistake than bad app code, because app code rolls back cleanly and schema changes generally do not.
+**Database migration rollback is not really a solvable problem, and that's stated explicitly rather than glossed over.** Prisma Migrate does not auto-generate down-migrations. Rolling back the application does not undo a schema change. This means migration files under `prisma/migrations/` require more PR-stage scrutiny than ordinary application code — a bad migration is a more expensive mistake than bad app code, because app code rolls back cleanly and schema changes generally do not.
 
 **Secrets never touch pipeline logs.** GitHub Actions should use OIDC federation with AWS — the pipeline assumes an IAM role scoped to exactly what it needs (push to this ECR repo, update this ECS service, read these specific Secrets Manager ARNs), rather than long-lived AWS access keys stored as GitHub secrets. Long-lived keys in CI are a known attack surface; short-lived OIDC-based credentials are current best practice.
 
@@ -247,7 +252,7 @@ ECS's ALB target group health check hits this endpoint before routing real traff
 ```
 PR opened
   │
-  ├─► backend-verify (mvn test + Testcontainers integration tests)
+  ├─► backend-verify (Jest unit + Testcontainers-for-Node integration tests)
   └─► frontend-verify (typecheck + lint + test)
         │
         ▼ (both pass)
@@ -260,13 +265,13 @@ PR opened
   Push to ECR
         │
         ▼
-  Run Flyway migration against RDS  ──► FAIL ──► pipeline stops, alert fires
+  Run `prisma migrate deploy` on RDS ──► FAIL ──► pipeline stops, alert fires
         │
         ▼ success
   Deploy new ECS task def (blue/green via CodeDeploy)
         │
         ▼
-  New tasks pass /actuator/health (incl. DB check)
+  New tasks pass /health (incl. DB check)
         │
         ├─► PASS ──► traffic cutover, old tasks drain
         └─► FAIL ──► automatic rollback, old version stays live, alert fires
@@ -288,4 +293,4 @@ Not everything in this document needs to be live simultaneously for a credible d
 
 ## 9. What This Document Demonstrates
 
-Independent of whether this is ever fully, live-deployed: the migration-ordering logic, the blue/green-vs-rolling tradeoff tied specifically to the in-process scheduler risk, and the explicit acknowledgment of where Flyway's rollback limitations live — these are the kind of details that distinguish "followed a deployment tutorial" from "understood why each gate exists and what it prevents."
+Independent of whether this is ever fully, live-deployed: the migration-ordering logic, the blue/green-vs-rolling tradeoff tied specifically to the in-process scheduler risk, and the explicit acknowledgment of where Prisma Migrate's rollback limitations live — these are the kind of details that distinguish "followed a deployment tutorial" from "understood why each gate exists and what it prevents."
