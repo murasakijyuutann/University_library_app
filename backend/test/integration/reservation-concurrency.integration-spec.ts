@@ -1,5 +1,6 @@
 import { ReservationQueueService } from '../../src/reservation/service/reservation-queue.service';
 import { ResourceService } from '../../src/resource/service/resource.service';
+import { StateTransitionValidator } from '../../src/common/statemachine/state-transition.validator';
 import { IntegrationTestContext } from './testcontainers-setup';
 
 // Phase 2.4 (build-guide.md) — the queue-position race. Two members racing to
@@ -14,7 +15,10 @@ describe('ReservationQueueService — queue-position race (Phase 2.4)', () => {
   beforeAll(async () => {
     ctx = await IntegrationTestContext.start();
     resourceService = new ResourceService(ctx.prisma);
-    reservationQueueService = new ReservationQueueService(ctx.prisma);
+    reservationQueueService = new ReservationQueueService(
+      ctx.prisma,
+      new StateTransitionValidator(),
+    );
   }, 120_000);
 
   afterAll(async () => {

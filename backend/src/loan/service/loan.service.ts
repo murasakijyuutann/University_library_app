@@ -3,8 +3,9 @@ import { CopyStatus, LoanStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConcurrentModificationException } from '../../common/exception/concurrent-modification.exception';
 import { EntityNotFoundException } from '../../common/exception/entity-not-found.exception';
-import { InvalidStateTransitionException } from '../../common/exception/invalid-state-transition.exception';
 import { NoAvailableCopyException } from '../../common/exception/no-available-copy.exception';
+import { StateTransitionValidator } from '../../common/statemachine/state-transition.validator';
+import { LOAN_TRANSITIONS } from '../../common/statemachine/transition-rules';
 
 /** The one row `borrowCopy`'s raw `SELECT ... FOR UPDATE` needs to decide with. */
 interface LockedCopyRow {
@@ -30,7 +31,10 @@ interface LockedCopyRow {
  */
 @Injectable()
 export class LoanService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stateTransitionValidator: StateTransitionValidator,
+  ) {}
 
   /**
    * Pessimistic last-copy grab (build-guide.md task 2.3). Locks one AVAILABLE
@@ -87,16 +91,16 @@ export class LoanService {
       if (!loan) {
         throw new EntityNotFoundException('Loan', loanId);
       }
-      if (
-        loan.status !== LoanStatus.ACTIVE &&
-        loan.status !== LoanStatus.OVERDUE
-      ) {
-        throw new InvalidStateTransitionException(
-          'Loan',
-          loan.status,
-          LoanStatus.RETURNED,
-        );
-      }
+      // Phase 3.3 (build-guide.md): routed through the generic validator
+      // instead of an ad hoc status check — one owner for transition legality,
+      // shared with ReservationQueueService, ThesisSubmissionService, and
+      // IllRequestService.
+      this.stateTransitionValidator.assertLegal(
+        'Loan',
+        LOAN_TRANSITIONS,
+        loan.status,
+        LoanStatus.RETURNED,
+      );
 
       const copy = await tx.resourceCopy.findUniqueOrThrow({
         where: { id: loan.copyId },

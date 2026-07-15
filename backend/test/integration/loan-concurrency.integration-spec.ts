@@ -1,5 +1,6 @@
 import { LoanService } from '../../src/loan/service/loan.service';
 import { ResourceService } from '../../src/resource/service/resource.service';
+import { StateTransitionValidator } from '../../src/common/statemachine/state-transition.validator';
 import { ConcurrentModificationException } from '../../src/common/exception/concurrent-modification.exception';
 import { NoAvailableCopyException } from '../../src/common/exception/no-available-copy.exception';
 import { IntegrationTestContext } from './testcontainers-setup';
@@ -16,7 +17,7 @@ describe('LoanService — concurrency (Phase 2.2 / 2.3)', () => {
   beforeAll(async () => {
     ctx = await IntegrationTestContext.start();
     resourceService = new ResourceService(ctx.prisma);
-    loanService = new LoanService(ctx.prisma);
+    loanService = new LoanService(ctx.prisma, new StateTransitionValidator());
   }, 120_000);
 
   afterAll(async () => {

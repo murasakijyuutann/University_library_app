@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
+import { IllRequestService } from './service/ill-request.service';
 
-// Empty scaffold (Phase 0.1, build-guide.md) — inter-library loan lands here.
-@Module({})
+// Phase 3 (build-guide.md): the IllRequestStatus state machine (minimal seam)
+// lives on IllRequestService. The librarian-facing review workflow and
+// external fulfillment integration are later work.
+@Module({
+  providers: [IllRequestService],
+  exports: [IllRequestService],
+})
 export class IllModule {}

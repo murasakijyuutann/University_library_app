@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EntityNotFoundException } from '../../common/exception/entity-not-found.exception';
+import { StateTransitionValidator } from '../../common/statemachine/state-transition.validator';
+import { RESERVATION_TRANSITIONS } from '../../common/statemachine/transition-rules';
 
 /** Active queue states — an EXPIRED/FULFILLED/CANCELLED row's position is free to reuse. */
 const ACTIVE_QUEUE_STATUSES: ReservationStatus[] = [
@@ -23,7 +26,10 @@ const MAX_ENQUEUE_ATTEMPTS = 5;
  */
 @Injectable()
 export class ReservationQueueService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stateTransitionValidator: StateTransitionValidator,
+  ) {}
 
   async enqueue(resourceId: bigint, memberId: bigint) {
     for (let attempt = 0; attempt < MAX_ENQUEUE_ATTEMPTS; attempt++) {
@@ -53,6 +59,33 @@ export class ReservationQueueService {
     throw new Error(
       `Failed to enqueue reservation for resource ${resourceId.toString()} after ${MAX_ENQUEUE_ATTEMPTS} attempts.`,
     );
+  }
+
+  /**
+   * Phase 3.3 (build-guide.md): a member cancelling their own place in the
+   * queue, routed through StateTransitionValidator rather than an ad hoc
+   * status check — e.g. an already-EXPIRED reservation has no legal path to
+   * CANCELLED, and the validator is what rejects that, not a scattered `if`.
+   */
+  async cancel(reservationId: bigint) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+    });
+    if (!reservation) {
+      throw new EntityNotFoundException('Reservation', reservationId);
+    }
+
+    this.stateTransitionValidator.assertLegal(
+      'Reservation',
+      RESERVATION_TRANSITIONS,
+      reservation.status,
+      ReservationStatus.CANCELLED,
+    );
+
+    return this.prisma.reservation.update({
+      where: { id: reservationId },
+      data: { status: ReservationStatus.CANCELLED },
+    });
   }
 }
 
