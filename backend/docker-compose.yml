@@ -1,0 +1,23 @@
+# Local dev only. CI/integration tests use Testcontainers (see test/), which
+# spin up their own disposable Postgres — this compose file is purely for
+# `npm run start:dev` against a real, persistent local database.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: library
+      POSTGRES_PASSWORD: library
+      POSTGRES_DB: university_library
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U library -d university_library']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

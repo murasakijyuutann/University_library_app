@@ -1,0 +1,486 @@
+// =============================================================================
+// University Library Portal — Prisma Schema
+// -----------------------------------------------------------------------------
+// Source of truth for the domain model lives in docs/entity-reference_v2.md and
+// docs/project-structure_v3.md. This file is copied from docs/schema.prisma
+// (the canonical, TypeScript-native authoring) and is the ONE schema Prisma
+// migrates from — do not hand-edit docs/schema.prisma and this file separately;
+// update docs/schema.prisma first, then sync here.
+//
+// The Resource hierarchy is HAND-MODELED (Prisma has no table inheritance):
+// a base `Resource` plus five subtypes in 1:1 relations sharing the base id.
+// The "subtype shares base id, created atomically" invariant is owned by
+// ResourceService in a prisma.$transaction — not by any ORM feature.
+// See stack-decision.md §1/§2a and project-structure_v3.md §2.3.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS — internally-owned closed value sets.
+// resource_type is special: it is the discriminant the whole hierarchy keys on,
+// so adding a member here is a deliberate, migration-forcing event by design.
+// =============================================================================
+
+enum ResourceType {
+  PHYSICAL_BOOK
+  THESIS
+  JOURNAL_ARTICLE
+  RESEARCH_REPORT
+  RARE_MATERIAL
+}
+
+enum MemberType {
+  UNDERGRAD
+  GRADUATE
+  FACULTY
+  STAFF
+}
+
+enum Role {
+  STUDENT
+  FACULTY
+  LIBRARIAN
+  ADMIN
+}
+
+enum DegreeType {
+  BACHELOR
+  MASTER
+  PHD
+}
+
+enum CopyStatus {
+  AVAILABLE
+  ON_LOAN
+  RESERVED
+  LOST
+}
+
+enum LoanStatus {
+  ACTIVE
+  RETURNED
+  OVERDUE
+  LOST
+}
+
+enum ReservationStatus {
+  QUEUED
+  READY_FOR_PICKUP
+  EXPIRED
+  FULFILLED
+  CANCELLED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EMBARGOED
+  PUBLISHED
+}
+
+enum IllRequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  REQUESTED_EXTERNALLY
+  FULFILLED
+  DELIVERED
+  RETURN_DUE
+  RETURNED
+  CANCELLED
+}
+
+enum NotificationType {
+  RESERVATION_READY
+  OVERDUE
+  EMBARGO_LIFTED
+}
+
+enum DeliveryStatus {
+  SENT
+  FAILED
+  RETRYING
+}
+
+// =============================================================================
+// RESOURCE HIERARCHY — base + five subtypes, hand-modeled as shared-PK 1:1.
+// Each subtype's `id` is BOTH its primary key AND the foreign key to Resource.
+// resourceType is a real column (not just inferred from which subtype row exists)
+// because it is the discriminated-union key and simplifies search/filter queries.
+// =============================================================================
+
+model Resource {
+  id           BigInt       @id @default(autoincrement())
+  resourceType ResourceType
+  title        String       @db.VarChar(500)
+  description  String?      @db.Text
+  // department/faculty are strings, not enums: in a real institution these are
+  // managed org entities that merge/rename/split. FK-in-waiting to a future
+  // `department` table rather than a fixed vocabulary baked into the schema.
+  department   String?      @db.VarChar(150)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // 1:1 subtype relations (exactly one is populated, enforced by ResourceService)
+  physicalBook   PhysicalBook?
+  thesis         Thesis?
+  journalArticle JournalArticle?
+  researchReport ResearchReport?
+  rareMaterial   RareMaterial?
+
+  // A hold is placed on a Resource generically (filled by whichever copy frees).
+  reservations     Reservation[]
+  // A published ThesisSubmission projects a Thesis catalog row (see ThesisSubmission).
+  thesisSubmission ThesisSubmission?
+
+  @@index([resourceType])
+  @@map("resource")
+}
+
+model PhysicalBook {
+  id              BigInt  @id
+  isbn            String? @db.VarChar(20)
+  author          String? @db.VarChar(300)
+  publisher       String? @db.VarChar(300)
+  publicationYear Int?
+  callNumber      String? @db.VarChar(50)
+
+  resource Resource       @relation(fields: [id], references: [id], onDelete: Cascade)
+  copies   ResourceCopy[]
+
+  @@map("physical_book")
+}
+
+model Thesis {
+  id              BigInt      @id
+  studentMemberId BigInt
+  degreeType      DegreeType?
+  // Display-facing: when the full text becomes public. The workflow embargo lives
+  // on ThesisSubmission; this is the catalog record's copy of it.
+  embargoUntil    DateTime?   @db.Date
+
+  resource Resource @relation(fields: [id], references: [id], onDelete: Cascade)
+  student  Member   @relation("ThesisStudent", fields: [studentMemberId], references: [id])
+
+  @@map("thesis")
+}
+
+model JournalArticle {
+  id        BigInt  @id
+  // DOI: a resolvable identifier (via doi.org), not a mere label — survives the
+  // article moving platforms, unlike an ISBN.
+  doi       String? @db.VarChar(150)
+  volume    String? @db.VarChar(20)
+  issue     String? @db.VarChar(20)
+  pageRange String? @db.VarChar(30)
+  journalId BigInt?
+  licenseId BigInt?
+  // NOTE (own-vs-route): there is deliberately NO file_path / content field here.
+  // Journal content is routed to the publisher, never stored. Absence is the
+  // schema-level enforcement of the routed-content rule.
+
+  resource Resource        @relation(fields: [id], references: [id], onDelete: Cascade)
+  journal  Journal?        @relation(fields: [journalId], references: [id])
+  license  JournalLicense? @relation(fields: [licenseId], references: [id])
+
+  @@index([journalId])
+  @@index([licenseId])
+  @@map("journal_article")
+}
+
+model ResearchReport {
+  id              BigInt  @id
+  departmentScope String? @db.VarChar(150)
+  reportYear      Int?
+
+  resource Resource @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("research_report")
+}
+
+model RareMaterial {
+  id              BigInt  @id
+  readingRoomOnly Boolean @default(true)
+  handlingNotes   String? @db.Text
+
+  resource Resource @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("rare_material")
+}
+
+// =============================================================================
+// PHYSICAL INVENTORY
+// =============================================================================
+
+model ResourceCopy {
+  id            BigInt     @id @default(autoincrement())
+  bookId        BigInt
+  barcodeLabel  String?    @db.VarChar(50) // data field only — no scanner integration
+  status        CopyStatus
+  // Optimistic lock: the last-copy race. Prisma has no @version — writers must
+  // update with where: { id, version } and check the affected-row count.
+  version       BigInt     @default(0)
+  shelfLocation String?    @db.VarChar(100)
+
+  book  PhysicalBook @relation(fields: [bookId], references: [id])
+  loans Loan[]
+
+  @@index([bookId])
+  @@map("resource_copy")
+}
+
+// =============================================================================
+// PEOPLE & ACCESS
+// Member is deliberately NOT a credential store — ssoSubjectId is the JWT subject
+// claim from the external IdP, never a password.
+// =============================================================================
+
+model Member {
+  id           BigInt     @id @default(autoincrement())
+  ssoSubjectId String     @unique @db.VarChar(150)
+  fullName     String     @db.VarChar(300)
+  email        String     @db.VarChar(300)
+  memberType   MemberType
+  faculty      String?    @db.VarChar(150) // string, not enum — see department note on Resource
+  role         Role
+  createdAt    DateTime   @default(now())
+
+  loans                   Loan[]
+  reservations            Reservation[]
+  fines                   Fine[]
+  thesesAsStudent         Thesis[]           @relation("ThesisStudent")
+  submissionsAsStudent    ThesisSubmission[] @relation("SubmissionStudent")
+  submissionsAsSupervisor ThesisSubmission[] @relation("SubmissionSupervisor")
+  illRequests             IllRequest[]
+  auditActions            AuditLogEntry[]
+  notifications           NotificationLog[]
+
+  @@map("member")
+}
+
+// Policy-as-data: loan/fine rules keyed by member type, consumed by
+// FineCalculationService and renewal logic — no hardcoded constants.
+model LoanPolicy {
+  memberType       MemberType @id
+  loanDurationDays Int
+  maxRenewals      Int
+  finePerDay       Decimal    @db.Decimal(10, 2)
+  gracePeriodDays  Int        @default(0)
+  maxFine          Decimal?   @db.Decimal(10, 2)
+
+  @@map("loan_policy")
+}
+
+model Fine {
+  id        BigInt   @id @default(autoincrement())
+  memberId  BigInt
+  loanId    BigInt?  // optional — a fine could in principle exist for a non-loan reason
+  amount    Decimal  @db.Decimal(10, 2)
+  reason    String?  @db.VarChar(200)
+  paid      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id])
+  loan   Loan?  @relation(fields: [loanId], references: [id])
+
+  @@index([memberId])
+  @@map("fine")
+}
+
+// =============================================================================
+// CIRCULATION
+// =============================================================================
+
+model Loan {
+  id           BigInt     @id @default(autoincrement())
+  copyId       BigInt
+  memberId     BigInt
+  status       LoanStatus
+  renewalCount Int        @default(0)
+  borrowedAt   DateTime   @default(now())
+  dueAt        DateTime
+  returnedAt   DateTime?
+
+  copy   ResourceCopy @relation(fields: [copyId], references: [id])
+  member Member       @relation(fields: [memberId], references: [id])
+  fines  Fine[]
+
+  @@index([copyId])
+  @@index([memberId])
+  @@map("loan")
+}
+
+model Reservation {
+  id            BigInt            @id @default(autoincrement())
+  resourceId    BigInt
+  memberId      BigInt
+  queuePosition Int
+  status        ReservationStatus
+  queuedAt      DateTime          @default(now())
+  readyAt       DateTime?
+  expiresAt     DateTime?
+
+  resource Resource @relation(fields: [resourceId], references: [id])
+  member   Member   @relation(fields: [memberId], references: [id])
+
+  // Queue-position race protection — the realistic mechanism (a DB constraint),
+  // used INSTEAD of an optimistic-lock version column on this entity.
+  @@unique([resourceId, queuePosition], name: "uq_active_queue_position")
+  @@index([memberId])
+  @@map("reservation")
+}
+
+// =============================================================================
+// THESIS SUBMISSION WORKFLOW
+// The workflow aggregate — distinct from the Thesis catalog record. Owns the
+// state machine, the file, and the approval chain. On publish, it PROJECTS a
+// Thesis catalog row (resourceId, NULL until published).
+// =============================================================================
+
+model ThesisSubmission {
+  id                 BigInt           @id @default(autoincrement())
+  studentMemberId    BigInt
+  supervisorMemberId BigInt?
+  degreeType         DegreeType?
+  submissionStatus   SubmissionStatus
+  embargoUntil       DateTime?        @db.Date
+  filePath           String?          @db.VarChar(500) // private S3 key; never a public bucket ACL
+  submittedAt        DateTime?
+  resourceId         BigInt?          @unique // NULL until PUBLISHED, then 1:1 to the Thesis catalog row
+  // Optimistic lock: student + supervisor + librarian realistically act on the
+  // same submission concurrently. Manual check-and-increment (no Prisma @version).
+  version            BigInt           @default(0)
+
+  student    Member    @relation("SubmissionStudent", fields: [studentMemberId], references: [id])
+  supervisor Member?   @relation("SubmissionSupervisor", fields: [supervisorMemberId], references: [id])
+  resource   Resource? @relation(fields: [resourceId], references: [id])
+
+  @@index([studentMemberId])
+  @@map("thesis_submission")
+}
+
+// =============================================================================
+// JOURNALS & LICENSING
+// =============================================================================
+
+model Journal {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(300)
+  // ISSN modeled closest-to-reality: a journal commonly has BOTH a print and an
+  // electronic ISSN, and an optional linking ISSN (ISSN-L) is the real dedup key.
+  // Deliberately NOT a single unique column — that would encode "one journal, one
+  // ISSN," which the scholarly-metadata world explicitly is not.
+  issnPrint      String? @db.VarChar(9) // p-ISSN, format NNNN-NNNN
+  issnElectronic String? @db.VarChar(9) // e-ISSN
+  issnLinking    String? @db.VarChar(9) // ISSN-L — the identifier that ties a journal's ISSNs together
+  publisher      String? @db.VarChar(300)
+
+  articles JournalArticle[]
+
+  // issnLinking is the realistic dedup key (unique where present; multiple NULLs
+  // allowed by Postgres, which is the behavior we want for journals lacking one).
+  @@unique([issnLinking])
+  @@map("journal")
+}
+
+model JournalLicense {
+  id                  BigInt    @id @default(autoincrement())
+  publisher           String    @db.VarChar(300)
+  concurrentUserLimit Int?
+  startsAt            DateTime? @db.Date
+  expiresAt           DateTime? @db.Date
+  // Optimistic lock: concurrent access checks read-and-update the same license's
+  // usage state simultaneously (concurrent-user-limit enforcement is a real
+  // write hotspot). Manual check-and-increment (no Prisma @version).
+  version             BigInt    @default(0)
+
+  articles      JournalArticle[]
+  facultyScopes LicenseFacultyScope[]
+
+  @@map("journal_license")
+}
+
+// Join table: which faculties a license covers ("Engineering's license doesn't
+// cover Medicine"). Composite PK. Faculty is a string for the same reason as
+// elsewhere — a managed org value, FK-in-waiting.
+model LicenseFacultyScope {
+  licenseId BigInt
+  faculty   String @db.VarChar(150)
+
+  license JournalLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@id([licenseId, faculty])
+  @@map("license_faculty_scope")
+}
+
+// =============================================================================
+// INTER-LIBRARY LOAN
+// Self-contained by design: captures bibliographic details as free fields rather
+// than referencing a Resource, because the item is NOT in the catalogue.
+// =============================================================================
+
+model IllRequest {
+  id            BigInt           @id @default(autoincrement())
+  memberId      BigInt
+  title         String           @db.VarChar(500)
+  author        String?          @db.VarChar(300)
+  doiOrIsbn     String?          @db.VarChar(150)
+  justification String?          @db.Text
+  status        IllRequestStatus
+  requestedAt   DateTime         @default(now())
+  fulfilledAt   DateTime?
+  returnDueAt   DateTime?
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@index([memberId])
+  @@map("ill_request")
+}
+
+// =============================================================================
+// CROSS-CUTTING INFRASTRUCTURE
+// =============================================================================
+
+// Append-only. Points loosely at other entities by (entityType, entityId) rather
+// than hard FKs, because it spans all of them. Only the actor is a real relation.
+model AuditLogEntry {
+  id            BigInt   @id @default(autoincrement())
+  entityType    String   @db.VarChar(50)
+  entityId      BigInt
+  action        String   @db.VarChar(50)
+  actorMemberId BigInt?
+  oldValue      Json?
+  newValue      Json?
+  createdAt     DateTime @default(now())
+
+  actor Member? @relation(fields: [actorMemberId], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("audit_log_entry")
+}
+
+model NotificationLog {
+  id       BigInt           @id @default(autoincrement())
+  memberId BigInt
+  type     NotificationType
+  // Delivery is async (Nest event emitter); status makes a dropped send visible
+  // rather than silently lost. Retry/dead-letter is deferred (BullMQ upgrade).
+  deliveryStatus DeliveryStatus
+  sentAt         DateTime       @default(now())
+  payload        Json?
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@index([memberId])
+  @@map("notification_log")
+}
