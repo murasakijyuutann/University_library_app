@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
+import { ReservationQueueService } from './service/reservation-queue.service';
 
-// Empty scaffold (Phase 0.1, build-guide.md) — the hold-queue module lands
-// here in Phase 2 (concurrency: queue-position race).
-@Module({})
+// Phase 2 (build-guide.md): FIFO enqueue, protected by the
+// uq_active_queue_position DB constraint, lives on ReservationQueueService.
+// Expiry/cascade-to-next-in-queue scheduling lands in a later phase.
+@Module({
+  providers: [ReservationQueueService],
+  exports: [ReservationQueueService],
+})
 export class ReservationModule {}

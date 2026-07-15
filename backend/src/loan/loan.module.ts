@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
+import { LoanService } from './service/loan.service';
 
-// Empty scaffold (Phase 0.1, build-guide.md) — physical book lifecycle
-// (borrow/return/renew) lands here in Phase 2/3.
-@Module({})
+// Phase 2 (build-guide.md): borrow (pessimistic last-copy grab) and return
+// (optimistic copy-availability transition) now live on LoanService. Renewal
+// (which must consult ReservationQueueService) lands in Phase 3.
+@Module({
+  providers: [LoanService],
+  exports: [LoanService],
+})
 export class LoanModule {}
