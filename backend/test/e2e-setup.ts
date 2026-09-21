@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Member, MemberType, Role } from '@prisma/client';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { ResourceService } from '../src/resource/service/resource.service';
 import { IntegrationTestContext } from './integration/testcontainers-setup';
 
@@ -28,10 +29,12 @@ export interface E2eSeedData {
  * Phase 4 e2e harness (build-guide.md): boots the full Nest app against a
  * disposable Testcontainers Postgres instance — the same migration history and
  * dependency shape as production, but with a known mock IdP secret for auth.
+ *
+ * PrismaService is overridden with the harness client so the app and seed
+ * share one connection to the container (env alone is brittle under Jest).
  */
 export class E2eTestContext {
   private integrationCtx!: IntegrationTestContext;
-  private moduleFixture!: TestingModule;
   app!: INestApplication;
   seed!: E2eSeedData;
 
@@ -53,11 +56,14 @@ export class E2eTestContext {
     process.env.JWT_PUBLIC_KEY_SOURCE = 'static';
     process.env.MOCK_IDP_SIGNING_SECRET = E2E_MOCK_IDP_SECRET;
 
-    this.moduleFixture = await Test.createTestingModule({
+    const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue(this.integrationCtx.prisma)
+      .compile();
 
-    this.app = this.moduleFixture.createNestApplication();
+    this.app = moduleFixture.createNestApplication();
     this.app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,

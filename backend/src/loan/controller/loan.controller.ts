@@ -13,6 +13,8 @@ import { JwtAuthGuard } from '../../security/jwt/jwt-auth.guard';
 import { LoadMemberGuard } from '../../member/guard/load-member.guard';
 import { CurrentMember } from '../../member/current-member.decorator';
 import { ParseBigIntPipe } from '../../common/pipe/parse-bigint.pipe';
+import { AccessPolicyResolver } from '../../resource/service/access-policy.resolver';
+import { ResourceService } from '../../resource/service/resource.service';
 import { LoanService } from '../service/loan.service';
 import { BorrowRequestDto } from '../dto/borrow-request.dto';
 import { LoanResponse, toLoanResponse } from '../dto/loan-response.dto';
@@ -24,6 +26,8 @@ const DEFAULT_LOAN_DURATION_DAYS = 14;
 export class LoanController {
   constructor(
     private readonly loanService: LoanService,
+    private readonly resourceService: ResourceService,
+    private readonly accessPolicyResolver: AccessPolicyResolver,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -32,9 +36,22 @@ export class LoanController {
     @Body() body: BorrowRequestDto,
     @CurrentMember() member: Member,
   ): Promise<LoanResponse> {
+    const bookId = BigInt(body.bookId);
+    const resource = await this.resourceService.findById(bookId);
+    if (!resource) {
+      throw new NotFoundException(`Resource ${body.bookId} was not found.`);
+    }
+    const decision = await this.accessPolicyResolver.resolve(
+      { id: member.id, faculty: member.faculty },
+      resource,
+    );
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
+    }
+
     const durationDays = body.loanDurationDays ?? DEFAULT_LOAN_DURATION_DAYS;
     const dueAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
-    const loan = await this.loanService.borrowCopy(BigInt(body.bookId), member.id, dueAt);
+    const loan = await this.loanService.borrowCopy(bookId, member.id, dueAt);
     return toLoanResponse(loan);
   }
 

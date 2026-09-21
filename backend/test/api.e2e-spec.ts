@@ -190,6 +190,22 @@ describe('API routes (Phase 4.1)', () => {
           expect(body.status).toBe('CANCELLED');
         });
     });
+
+    it('POST /api/reservations rejects a rare material via AccessPolicyResolver', async () => {
+      const rare = await new ResourceService(ctx.prisma).createRareMaterial({
+        title: 'Supervised-Only Manuscript',
+        handlingNotes: 'Reading room only.',
+      });
+
+      await request(ctx.app.getHttpServer())
+        .post('/api/reservations')
+        .set(ctx.authHeader(studentToken))
+        .send({ resourceId: rare.id.toString() })
+        .expect(403)
+        .expect(({ body }) => {
+          expect(body.message).toMatch(/supervised/i);
+        });
+    });
   });
 
   describe('Thesis submissions', () => {

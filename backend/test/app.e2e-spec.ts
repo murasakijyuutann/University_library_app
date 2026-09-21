@@ -1,26 +1,22 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
-import { AppModule } from './../src/app.module';
+import { E2eTestContext } from './e2e-setup';
 
+// Health is also covered in api.e2e-spec; this file keeps the original
+// entry-point smoke check but against the Phase 4 Testcontainers harness
+// so `npm run test:e2e` does not require a local Postgres.
 describe('Health (e2e)', () => {
-  let app: INestApplication;
+  let ctx: E2eTestContext;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+  beforeAll(async () => {
+    ctx = await E2eTestContext.start();
+  }, 120_000);
 
-    app = moduleFixture.createNestApplication();
-    await app.init();
-  });
-
-  afterEach(async () => {
-    await app.close();
+  afterAll(async () => {
+    await ctx.stop();
   });
 
   it('/health (GET)', () => {
-    return request(app.getHttpServer())
+    return request(ctx.app.getHttpServer())
       .get('/health')
       .expect(200)
       .expect(({ body }) => {

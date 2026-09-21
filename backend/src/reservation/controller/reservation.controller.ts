@@ -13,6 +13,8 @@ import { JwtAuthGuard } from '../../security/jwt/jwt-auth.guard';
 import { LoadMemberGuard } from '../../member/guard/load-member.guard';
 import { CurrentMember } from '../../member/current-member.decorator';
 import { ParseBigIntPipe } from '../../common/pipe/parse-bigint.pipe';
+import { AccessPolicyResolver } from '../../resource/service/access-policy.resolver';
+import { ResourceService } from '../../resource/service/resource.service';
 import { ReservationQueueService } from '../service/reservation-queue.service';
 import { EnqueueReservationRequestDto } from '../dto/enqueue-reservation-request.dto';
 import { ReservationResponse, toReservationResponse } from '../dto/reservation-response.dto';
@@ -22,6 +24,8 @@ import { ReservationResponse, toReservationResponse } from '../dto/reservation-r
 export class ReservationController {
   constructor(
     private readonly reservationQueueService: ReservationQueueService,
+    private readonly resourceService: ResourceService,
+    private readonly accessPolicyResolver: AccessPolicyResolver,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -30,8 +34,21 @@ export class ReservationController {
     @Body() body: EnqueueReservationRequestDto,
     @CurrentMember() member: Member,
   ): Promise<ReservationResponse> {
+    const resourceId = BigInt(body.resourceId);
+    const resource = await this.resourceService.findById(resourceId);
+    if (!resource) {
+      throw new NotFoundException(`Resource ${body.resourceId} was not found.`);
+    }
+    const decision = await this.accessPolicyResolver.resolve(
+      { id: member.id, faculty: member.faculty },
+      resource,
+    );
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
+    }
+
     const reservation = await this.reservationQueueService.enqueue(
-      BigInt(body.resourceId),
+      resourceId,
       member.id,
     );
     return toReservationResponse(reservation);
