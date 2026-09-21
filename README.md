@@ -32,7 +32,7 @@ Two equal goals shape the stack:
 
 ## Status
 
-**Backend Phases 0–4 are complete.** Search (Phase 5), the SPA (Phase 6), and operational hardening (Phase 7) are next.
+**Backend Phases 0–5 are complete.** The SPA (Phase 6) and operational hardening (Phase 7) are next.
 
 | Phase | Focus | Status |
 |---|---|---|
@@ -41,8 +41,8 @@ Two equal goals shape the stack:
 | 2 | Loan / reservation concurrency under real races | Done |
 | 3 | `AccessPolicyResolver` + state-transition validators | Done |
 | 4 | REST API + JWT SSO relying-party + mock IdP | Done |
-| 5 | Faceted search behind `UnifiedSearchService` | Next |
-| 6 | Vite / React / TypeScript SPA | Planned |
+| 5 | Faceted search behind `UnifiedSearchService` | Done |
+| 6 | Vite / React / TypeScript SPA | Next |
 | 7 | Audit, notifications, policy-as-data, deploy | Planned |
 
 Build order and exit criteria: [`docs/build-guide.md`](docs/build-guide.md).
@@ -54,6 +54,7 @@ Build order and exit criteria: [`docs/build-guide.md`](docs/build-guide.md).
 - Per-type access decisions (embargo, license scope, department, supervised-only)
 - Authenticated API (`JwtAuthGuard`, roles, member provisioning check)
 - Dev mock IdP with a `PublicKeyProvider` seam (static key ↔ JWKS)
+- Public faceted search (`GET /api/search`) behind `UnifiedSearchService` (Postgres FTS + in-memory swap fixture)
 - Unit, integration (Testcontainers), and e2e (Supertest) coverage
 
 Swagger (when the API is running): `http://localhost:3000/api/docs`
@@ -76,7 +77,7 @@ Details: [`docs/data-provenance-and-ingestion_v2.md`](docs/data-provenance-and-i
 | ORM / DB | Prisma + PostgreSQL |
 | Auth | JWT relying party (mock IdP in dev; JWKS-ready for real SSO) |
 | Frontend | Vite + React + TypeScript *(Phase 6)* |
-| Search | Postgres FTS behind a swappable contract *(Phase 5)* |
+| Search | Postgres FTS behind `UnifiedSearchService` (swappable) |
 
 **Honest tradeoff:** Prisma has no table inheritance. The six-table resource hierarchy is hand-modeled (shared PK 1:1), with the create invariant owned by a service transaction and exhaustiveness enforced by a TypeScript discriminated union. That cost is intentional — see [`docs/stack-decision_v2.md`](docs/stack-decision_v2.md).
 
@@ -136,7 +137,7 @@ npm run test:e2e              # full API + auth against Testcontainers
 - **Access** — one `AccessPolicyResolver` for all five resource types
 - **Transitions** — shared `StateTransitionValidator` for loan / reservation / thesis / ILL
 - **Auth** — consume identity; swap mock static key → IdP JWKS without rewriting guards
-- **Search** *(Phase 5)* — `UnifiedSearchService` so Postgres FTS can later yield to OpenSearch
+- **Search** — `UnifiedSearchService` so Postgres FTS can later yield to OpenSearch
 - **Deploy** — production-shaped blueprint (ECS/RDS/S3), not yet provisioned
 
 ---
