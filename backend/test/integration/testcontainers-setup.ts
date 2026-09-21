@@ -22,6 +22,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 export class IntegrationTestContext {
   private constructor(
     private readonly container: StartedPostgreSqlContainer,
+    readonly databaseUrl: string,
     readonly prisma: PrismaService,
   ) {}
 
@@ -54,7 +55,7 @@ export class IntegrationTestContext {
     });
     await prisma.$connect();
 
-    return new IntegrationTestContext(container, prisma);
+    return new IntegrationTestContext(container, databaseUrl, prisma);
   }
 
   async stop(): Promise<void> {
