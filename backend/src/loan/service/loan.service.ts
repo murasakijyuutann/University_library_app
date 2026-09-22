@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { CopyStatus, LoanStatus } from '@prisma/client';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { CopyStatus, LoanStatus, MemberType, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConcurrentModificationException } from '../../common/exception/concurrent-modification.exception';
 import { EntityNotFoundException } from '../../common/exception/entity-not-found.exception';
 import { NoAvailableCopyException } from '../../common/exception/no-available-copy.exception';
 import { StateTransitionValidator } from '../../common/statemachine/state-transition.validator';
 import { LOAN_TRANSITIONS } from '../../common/statemachine/transition-rules';
+import { LoanPolicyService } from './loan-policy.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { LOAN_OVERDUE_EVENT, LoanOverdueEvent } from '../../notification/events';
 
 /** The one row `borrowCopy`'s raw `SELECT ... FOR UPDATE` needs to decide with. */
 interface LockedCopyRow {
@@ -14,34 +17,19 @@ interface LockedCopyRow {
 }
 
 /**
- * Owns the two concurrency-critical paths of the physical-book lifecycle
- * (build-guide.md Phase 2; project-structure_v3.md §2.4/§2.5/§4):
- *
- * - `borrowCopy` — the PESSIMISTIC "grab the last available copy" path. Uses an
- *   interactive transaction issuing a raw `SELECT ... FOR UPDATE` to lock the
- *   candidate row before deciding, so two racing borrowers can't both win.
- * - `returnLoan` — the OPTIMISTIC path for copy-availability transitions.
- *   `ResourceCopy` has no Prisma `@version` annotation, so the lock is a
- *   conditional `updateMany` on `where: { id, version }`, and the affected-row
- *   count (0 or 1) is the concurrency signal — not an ORM feature.
- *
- * Per the copy/loan consistency decision (project-structure_v3.md §4), a
- * returned loan and a freed copy commit in the SAME `prisma.$transaction`, so a
- * failed transaction leaves neither half applied.
+ * Owns the concurrency-critical paths of the physical-book lifecycle
+ * (build-guide.md Phase 2 / 7.3). Renewal consults `loan_policy` and blocks
+ * when another member holds an active reservation on the same resource.
  */
 @Injectable()
 export class LoanService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stateTransitionValidator: StateTransitionValidator,
+    private readonly loanPolicyService: LoanPolicyService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  /**
-   * Pessimistic last-copy grab (build-guide.md task 2.3). Locks one AVAILABLE
-   * copy row for the given book with `FOR UPDATE` before transitioning it,
-   * so a concurrent second caller blocks on the same row rather than reading a
-   * stale "still available" snapshot and double-borrowing it.
-   */
   async borrowCopy(bookId: bigint, memberId: bigint, dueAt: Date) {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<LockedCopyRow[]>`
@@ -58,9 +46,6 @@ export class LoanService {
         throw new NoAvailableCopyException(bookId);
       }
 
-      // The row is already locked by FOR UPDATE above, so this update cannot
-      // race — it exists to keep `version` accurate for later optimistic
-      // transitions (e.g. returnLoan), not to guard this decision itself.
       await tx.resourceCopy.update({
         where: { id: candidate.id },
         data: { status: CopyStatus.ON_LOAN, version: { increment: 1 } },
@@ -77,24 +62,12 @@ export class LoanService {
     });
   }
 
-  /**
-   * Optimistic copy-availability transition (build-guide.md task 2.2), composed
-   * with the loan-status flip in one transaction (project-structure_v3.md §4's
-   * copy/loan consistency decision). `updateMany` on `where: { id, version }`
-   * is the lock; `count === 0` means another request already won the race on
-   * this exact copy, and the caller sees a clean `ConcurrentModificationException`
-   * rather than a silently-stale write.
-   */
   async returnLoan(loanId: bigint) {
     return this.prisma.$transaction(async (tx) => {
       const loan = await tx.loan.findUnique({ where: { id: loanId } });
       if (!loan) {
         throw new EntityNotFoundException('Loan', loanId);
       }
-      // Phase 3.3 (build-guide.md): routed through the generic validator
-      // instead of an ad hoc status check — one owner for transition legality,
-      // shared with ReservationQueueService, ThesisSubmissionService, and
-      // IllRequestService.
       this.stateTransitionValidator.assertLegal(
         'Loan',
         LOAN_TRANSITIONS,
@@ -119,5 +92,87 @@ export class LoanService {
         data: { status: LoanStatus.RETURNED, returnedAt: new Date() },
       });
     });
+  }
+
+  /**
+   * Renew against `loan_policy.maxRenewals` and block when any other member
+   * has an active QUEUED/READY hold on the resource (project-structure_v3 §2.4).
+   */
+  async renewLoan(loanId: bigint, memberType: MemberType) {
+    const loan = await this.prisma.loan.findUnique({
+      where: { id: loanId },
+      include: { copy: true },
+    });
+    if (!loan) {
+      throw new EntityNotFoundException('Loan', loanId);
+    }
+    if (loan.status !== LoanStatus.ACTIVE && loan.status !== LoanStatus.OVERDUE) {
+      throw new BadRequestException('Only active or overdue loans can be renewed.');
+    }
+
+    const policy = await this.loanPolicyService.requireByMemberType(memberType);
+    if (loan.renewalCount >= policy.maxRenewals) {
+      throw new BadRequestException(
+        `Renewal cap of ${policy.maxRenewals} reached for member type ${memberType}.`,
+      );
+    }
+
+    const bookId = loan.copy.bookId;
+    const blockingHold = await this.prisma.reservation.findFirst({
+      where: {
+        resourceId: bookId,
+        status: {
+          in: [ReservationStatus.QUEUED, ReservationStatus.READY_FOR_PICKUP],
+        },
+        NOT: { memberId: loan.memberId },
+      },
+    });
+    if (blockingHold) {
+      throw new BadRequestException(
+        'Renewal is blocked because another member has an active reservation on this item.',
+      );
+    }
+
+    const newDueAt = new Date(
+      loan.dueAt.getTime() + policy.loanDurationDays * 24 * 60 * 60 * 1000,
+    );
+    return this.prisma.loan.update({
+      where: { id: loanId },
+      data: {
+        renewalCount: { increment: 1 },
+        dueAt: newDueAt,
+        status: LoanStatus.ACTIVE,
+      },
+    });
+  }
+
+  /** Marks overdue loans and emits notification events (Phase 7.2). */
+  async markOverdueLoans(asOf: Date = new Date()): Promise<number> {
+    const overdue = await this.prisma.loan.findMany({
+      where: {
+        status: LoanStatus.ACTIVE,
+        dueAt: { lt: asOf },
+        returnedAt: null,
+      },
+    });
+    for (const loan of overdue) {
+      this.stateTransitionValidator.assertLegal(
+        'Loan',
+        LOAN_TRANSITIONS,
+        loan.status,
+        LoanStatus.OVERDUE,
+      );
+      await this.prisma.loan.update({
+        where: { id: loan.id },
+        data: { status: LoanStatus.OVERDUE },
+      });
+      const event: LoanOverdueEvent = {
+        loanId: loan.id,
+        memberId: loan.memberId,
+        dueAt: loan.dueAt,
+      };
+      this.eventEmitter.emit(LOAN_OVERDUE_EVENT, event);
+    }
+    return overdue.length;
   }
 }

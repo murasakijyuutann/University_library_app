@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, ReservationStatus } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EntityNotFoundException } from '../../common/exception/entity-not-found.exception';
 import { StateTransitionValidator } from '../../common/statemachine/state-transition.validator';
 import { RESERVATION_TRANSITIONS } from '../../common/statemachine/transition-rules';
+import {
+  RESERVATION_READY_EVENT,
+  ReservationReadyEvent,
+} from '../../notification/events';
 
 /** Active queue states — an EXPIRED/FULFILLED/CANCELLED row's position is free to reuse. */
 const ACTIVE_QUEUE_STATUSES: ReservationStatus[] = [
@@ -15,20 +20,14 @@ const MAX_ENQUEUE_ATTEMPTS = 5;
 
 /**
  * Owns the hold-queue's FIFO position assignment (build-guide.md Phase 2.4;
- * project-structure_v3.md §2.5). The read-then-write here (read the current
- * max position, then insert at max + 1) has a genuine race window between two
- * concurrent enqueues — the fix is NOT application-level coordination (a mutex,
- * a queue) but the database itself: `reservation`'s
- * `UNIQUE (resourceId, queuePosition)` constraint (see prisma/schema.prisma)
- * makes a colliding position a constraint violation (Postgres error P2002),
- * which this method catches and retries against the now-current max — the
- * database enforces the invariant; this method just reacts to it.
+ * project-structure_v3.md §2.5). Phase 7.2 adds markReadyForPickup + notify.
  */
 @Injectable()
 export class ReservationQueueService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stateTransitionValidator: StateTransitionValidator,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async enqueue(resourceId: bigint, memberId: bigint) {
@@ -50,7 +49,7 @@ export class ReservationQueueService {
         });
       } catch (error) {
         if (isQueuePositionCollision(error)) {
-          continue; // another enqueue took `nextPosition` first — recompute and retry
+          continue;
         }
         throw error;
       }
@@ -61,12 +60,6 @@ export class ReservationQueueService {
     );
   }
 
-  /**
-   * Phase 3.3 (build-guide.md): a member cancelling their own place in the
-   * queue, routed through StateTransitionValidator rather than an ad hoc
-   * status check — e.g. an already-EXPIRED reservation has no legal path to
-   * CANCELLED, and the validator is what rejects that, not a scattered `if`.
-   */
   async cancel(reservationId: bigint) {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: reservationId },
@@ -99,13 +92,45 @@ export class ReservationQueueService {
       orderBy: { queuedAt: 'desc' },
     });
   }
+
+  /**
+   * Staff/system path: QUEUED → READY_FOR_PICKUP and notify the member
+   * asynchronously (Phase 7.2).
+   */
+  async markReadyForPickup(reservationId: bigint) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+    });
+    if (!reservation) {
+      throw new EntityNotFoundException('Reservation', reservationId);
+    }
+
+    this.stateTransitionValidator.assertLegal(
+      'Reservation',
+      RESERVATION_TRANSITIONS,
+      reservation.status,
+      ReservationStatus.READY_FOR_PICKUP,
+    );
+
+    const updated = await this.prisma.reservation.update({
+      where: { id: reservationId },
+      data: {
+        status: ReservationStatus.READY_FOR_PICKUP,
+        readyAt: new Date(),
+      },
+    });
+
+    const event: ReservationReadyEvent = {
+      reservationId: updated.id,
+      memberId: updated.memberId,
+      resourceId: updated.resourceId,
+    };
+    this.eventEmitter.emit(RESERVATION_READY_EVENT, event);
+    return updated;
+  }
 }
 
 function isQueuePositionCollision(error: unknown): boolean {
-  // P2002 is Prisma's generic "unique constraint violation" code. `reservation`
-  // has exactly one unique constraint (`uq_active_queue_position`), so the code
-  // alone is unambiguous here — the exact shape of `error.meta.target` differs
-  // across Prisma versions/providers and isn't worth depending on.
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === 'P2002'

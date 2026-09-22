@@ -1,0 +1,54 @@
+name: backend-ci
+
+# Phase 7.4 — verify + document migration-before-deploy ordering.
+# Live ECS deploy is not wired; the job graph encodes the safe sequence.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run boundaries:check
+      - run: npm run build
+      - run: npm test -- --runInBand
+      - run: npm run test:integration -- --runInBand
+      - run: npm run test:e2e -- --runInBand
+
+  # Documented deploy ordering (manual / future CD job):
+  # 1) build & push image
+  # 2) run `prisma migrate deploy` against the target DB (Secrets Manager DSN)
+  # 3) only then roll ECS service to the new task definition
+  # App rollback ≠ migration rollback — see docs/deployment-blueprint.md.
+  migrate-before-deploy-reminder:
+    runs-on: ubuntu-latest
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Migration ordering gate (documented)
+        run: |
+          echo "Deploy ordering:"
+          echo "  1. prisma migrate deploy  (with DB URL from secrets — never commit secrets)"
+          echo "  2. ECS rolling update to new image"
+          echo "Secrets must come from the secret store, not task-definition plaintext."

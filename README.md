@@ -32,18 +32,18 @@ Two equal goals shape the stack:
 
 ## Status
 
-**Backend Phases 0–5 are complete.** Phase 6 (server-rendered HTML portal) is **in progress** — scaffold, search, auth cookies/CSRF, resource detail, and thesis draft are wired. Phase 7 is operational hardening.
+**Backend Phases 0–7 are complete.** The portal is server-rendered (Handlebars + HTMX); Phase 7 added audit, notifications, loan policy, and deployment/CI scaffolding.
 
 | Phase | Focus | Status |
 |---|---|---|
 | 0 | Scaffolding, Postgres, Testcontainers, boundary lint | Done |
 | 1 | Hand-modeled resource hierarchy + discriminated unions | Done |
 | 2 | Loan / reservation concurrency under real races | Done |
-| 3 | `AccessPolicyResolver` + state-transition validators | Done |
-| 4 | REST API + JWT SSO relying-party + mock IdP | Done |
-| 5 | Faceted search behind `UnifiedSearchService` | Done |
-| 6 | NestJS MVC + Handlebars + selective HTMX | In progress |
-| 7 | Audit, notifications, policy-as-data, deploy | Planned |
+| 3 | `AccessPolicyResolver` + state-transition validator | Done |
+| 4 | REST API + JWT + mock IdP + e2e | Done |
+| 5 | Unified search (FTS + throttling) | Done |
+| 6 | Handlebars portal + CSRF + HTMX + thesis upload | Done |
+| 7 | Audit, notifications, loan policy, deploy blueprint/CI | Done |
 
 Build order and exit criteria: [`docs/build-guide.md`](docs/build-guide.md).
 

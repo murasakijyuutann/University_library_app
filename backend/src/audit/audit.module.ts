@@ -1,6 +1,19 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AuditInterceptor } from './audit.interceptor';
+import { AuditLogService } from './service/audit-log.service';
 
-// Empty scaffold (Phase 0.1, build-guide.md) — the AuditInterceptor and
-// audit_log_entry writes land here in Phase 7.
-@Module({})
+/**
+ * Phase 7.1 — cross-cutting audit trail.
+ * Coverage boundary: docs/audit-coverage.md
+ */
+@Module({
+  imports: [PrismaModule],
+  providers: [
+    AuditLogService,
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+  ],
+  exports: [AuditLogService],
+})
 export class AuditModule {}

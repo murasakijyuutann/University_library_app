@@ -10,6 +10,7 @@ Design and build artifacts for the University Library Portal. The project overvi
 4. **[`build-guide.md`](build-guide.md)** — phased implementation and exit criteria
 5. **[`search-design.md`](search-design.md)** + **[`search-interface-contract.md`](search-interface-contract.md)** — before Phase 5
 6. **[`deployment-blueprint.md`](deployment-blueprint.md)** + **[`aws-cloud-infrastructure-plan.md`](aws-cloud-infrastructure-plan.md)** — ops shape (design / proposed)
+7. **[`audit-coverage.md`](audit-coverage.md)** + **[`post-v1-deferred.md`](post-v1-deferred.md)** — Phase 7 audit boundary and deferred log
 
 ## Full map
 
@@ -25,6 +26,8 @@ Design and build artifacts for the University Library Portal. The project overvi
 | [`deployment-blueprint.md`](deployment-blueprint.md) | Production deploy / CI reasoning |
 | [`aws-cloud-infrastructure-plan.md`](aws-cloud-infrastructure-plan.md) | Concrete AWS plan (not yet provisioned) |
 | [`phase6-e2e-troubleshooting.md`](phase6-e2e-troubleshooting.md) | CSRF / Handlebars e2e collapse post-mortem |
+| [`audit-coverage.md`](audit-coverage.md) | Phase 7.1 audit interceptor coverage boundary |
+| [`post-v1-deferred.md`](post-v1-deferred.md) | Phase 7.5 closed / deferred decision log |
 
 ## Historical / superseded
 

@@ -18,6 +18,7 @@ import { IllRequestService } from '../service/ill-request.service';
 import { SubmitIllRequestDto } from '../dto/submit-ill-request.dto';
 import { TransitionIllRequestDto } from '../dto/transition-ill-request.dto';
 import { IllRequestResponse, toIllRequestResponse } from '../dto/ill-request-response.dto';
+import { Audited } from '../../audit/audited.decorator';
 
 /** Student-facing submit, librarian-facing review (project-structure_v3.md §2.8). */
 @Controller('api/ill-requests')
@@ -46,6 +47,12 @@ export class IllRequestController {
   @Post(':id/transition')
   @Roles(Role.LIBRARIAN, Role.ADMIN)
   @UseGuards(RolesGuard)
+  @Audited({
+    entityType: 'IllRequest',
+    action: 'TRANSITION',
+    entityId: (result) => BigInt((result as IllRequestResponse).id),
+    newValue: (result) => result,
+  })
   async transition(
     @Param('id', ParseBigIntPipe) id: bigint,
     @Body() body: TransitionIllRequestDto,

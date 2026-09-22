@@ -1,0 +1,8 @@
+node_modules
+dist
+.local-storage
+.env
+.env.*
+coverage
+*.md
+test

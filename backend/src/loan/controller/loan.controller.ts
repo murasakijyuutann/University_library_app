@@ -18,8 +18,8 @@ import { ResourceService } from '../../resource/service/resource.service';
 import { LoanService } from '../service/loan.service';
 import { BorrowRequestDto } from '../dto/borrow-request.dto';
 import { LoanResponse, toLoanResponse } from '../dto/loan-response.dto';
-
-const DEFAULT_LOAN_DURATION_DAYS = 14;
+import { Audited } from '../../audit/audited.decorator';
+import { LoanPolicyService } from '../service/loan-policy.service';
 
 @Controller('api/loans')
 @UseGuards(JwtAuthGuard, LoadMemberGuard)
@@ -28,10 +28,17 @@ export class LoanController {
     private readonly loanService: LoanService,
     private readonly resourceService: ResourceService,
     private readonly accessPolicyResolver: AccessPolicyResolver,
+    private readonly loanPolicyService: LoanPolicyService,
     private readonly prisma: PrismaService,
   ) {}
 
   @Post()
+  @Audited({
+    entityType: 'Loan',
+    action: 'BORROW',
+    entityId: (result) => BigInt((result as LoanResponse).id),
+    newValue: (result) => result,
+  })
   async borrow(
     @Body() body: BorrowRequestDto,
     @CurrentMember() member: Member,
@@ -49,13 +56,20 @@ export class LoanController {
       throw new ForbiddenException(decision.reason);
     }
 
-    const durationDays = body.loanDurationDays ?? DEFAULT_LOAN_DURATION_DAYS;
+    const policy = await this.loanPolicyService.requireByMemberType(member.memberType);
+    const durationDays = body.loanDurationDays ?? policy.loanDurationDays;
     const dueAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
     const loan = await this.loanService.borrowCopy(bookId, member.id, dueAt);
     return toLoanResponse(loan);
   }
 
   @Post(':id/return')
+  @Audited({
+    entityType: 'Loan',
+    action: 'RETURN',
+    entityId: (result) => BigInt((result as LoanResponse).id),
+    newValue: (result) => result,
+  })
   async returnLoan(
     @Param('id', ParseBigIntPipe) id: bigint,
     @CurrentMember() member: Member,
@@ -71,6 +85,29 @@ export class LoanController {
     }
 
     const loan = await this.loanService.returnLoan(id);
+    return toLoanResponse(loan);
+  }
+
+  @Post(':id/renew')
+  @Audited({
+    entityType: 'Loan',
+    action: 'RENEW',
+    entityId: (result) => BigInt((result as LoanResponse).id),
+    newValue: (result) => result,
+  })
+  async renew(
+    @Param('id', ParseBigIntPipe) id: bigint,
+    @CurrentMember() member: Member,
+  ): Promise<LoanResponse> {
+    const existing = await this.prisma.loan.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Loan ${id.toString()} was not found.`);
+    }
+    if (existing.memberId !== member.id) {
+      throw new ForbiddenException('You may only renew your own loans.');
+    }
+
+    const loan = await this.loanService.renewLoan(id, member.memberType);
     return toLoanResponse(loan);
   }
 }

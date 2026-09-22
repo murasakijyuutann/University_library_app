@@ -19,6 +19,7 @@ import { ThesisSubmissionService } from '../service/thesis-submission.service';
 import { CreateThesisSubmissionRequestDto } from '../dto/create-thesis-submission-request.dto';
 import { TransitionThesisSubmissionRequestDto } from '../dto/transition-thesis-submission-request.dto';
 import { ThesisSubmissionResponse, toThesisSubmissionResponse } from '../dto/thesis-submission-response.dto';
+import { Audited } from '../../audit/audited.decorator';
 
 /**
  * Thin controller over the minimal ThesisSubmissionService (Phase 3's scope
@@ -53,6 +54,12 @@ export class ThesisSubmissionController {
   }
 
   @Post(':id/transition')
+  @Audited({
+    entityType: 'ThesisSubmission',
+    action: 'TRANSITION',
+    entityId: (result) => BigInt((result as ThesisSubmissionResponse).id),
+    newValue: (result) => result,
+  })
   async transition(
     @Param('id', ParseBigIntPipe) id: bigint,
     @Body() body: TransitionThesisSubmissionRequestDto,

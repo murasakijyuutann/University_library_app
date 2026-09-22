@@ -18,6 +18,7 @@ import { ResourceService } from '../../resource/service/resource.service';
 import { ReservationQueueService } from '../service/reservation-queue.service';
 import { EnqueueReservationRequestDto } from '../dto/enqueue-reservation-request.dto';
 import { ReservationResponse, toReservationResponse } from '../dto/reservation-response.dto';
+import { Audited } from '../../audit/audited.decorator';
 
 @Controller('api/reservations')
 @UseGuards(JwtAuthGuard, LoadMemberGuard)
@@ -30,6 +31,12 @@ export class ReservationController {
   ) {}
 
   @Post()
+  @Audited({
+    entityType: 'Reservation',
+    action: 'ENQUEUE',
+    entityId: (result) => BigInt((result as ReservationResponse).id),
+    newValue: (result) => result,
+  })
   async enqueue(
     @Body() body: EnqueueReservationRequestDto,
     @CurrentMember() member: Member,
@@ -55,6 +62,12 @@ export class ReservationController {
   }
 
   @Post(':id/cancel')
+  @Audited({
+    entityType: 'Reservation',
+    action: 'CANCEL',
+    entityId: (result) => BigInt((result as ReservationResponse).id),
+    newValue: (result) => result,
+  })
   async cancel(
     @Param('id', ParseBigIntPipe) id: bigint,
     @CurrentMember() member: Member,

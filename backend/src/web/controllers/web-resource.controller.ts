@@ -25,6 +25,7 @@ import { ConcurrentModificationException } from '../../common/exception/concurre
 import { NoAvailableCopyException } from '../../common/exception/no-available-copy.exception';
 import { WebAuthGuard } from '../guards/web-auth.guard';
 import { ResourcePresenter } from '../presenters/resource.presenter';
+import { LoanPolicyService } from '../../loan/service/loan-policy.service';
 
 class BorrowFormDto {
   /** Optimistic concurrency token from the selected copy. */
@@ -54,6 +55,7 @@ export class WebResourceController {
     private readonly reservationQueueService: ReservationQueueService,
     private readonly prisma: PrismaService,
     private readonly resourcePresenter: ResourcePresenter,
+    private readonly loanPolicyService: LoanPolicyService,
   ) {}
 
   @Get(':id')
@@ -158,7 +160,12 @@ export class WebResourceController {
     }
 
     try {
-      const dueAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      const policy = await this.loanPolicyService.requireByMemberType(
+        member.memberType,
+      );
+      const dueAt = new Date(
+        Date.now() + policy.loanDurationDays * 24 * 60 * 60 * 1000,
+      );
       await this.loanService.borrowCopy(id, member.id, dueAt);
       res.redirect(303, `/resources/${id.toString()}?alert=borrowed`);
     } catch (error) {
