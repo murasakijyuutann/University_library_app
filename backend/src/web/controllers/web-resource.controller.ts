@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { Member } from '@prisma/client';
 import { Request, Response } from 'express';
-import { IsOptional, Matches } from 'class-validator';
+import { IsOptional, IsString, Matches } from 'class-validator';
 import { LoadMemberGuard } from '../../member/guard/load-member.guard';
 import { CurrentMember } from '../../member/current-member.decorator';
 import { ParseBigIntPipe } from '../../common/pipe/parse-bigint.pipe';
@@ -35,13 +35,13 @@ class BorrowFormDto {
   copyId!: string;
 
   @IsOptional()
-  @Matches(/^\d+$/)
+  @IsString()
   _csrf?: string;
 }
 
 class ReserveFormDto {
   @IsOptional()
-  @Matches(/^\d+$/)
+  @IsString()
   _csrf?: string;
 }
 
@@ -83,12 +83,43 @@ export class WebResourceController {
       }
     }
 
+    const alert = req.query.alert as string | undefined;
     res.render(template, {
       title: viewModel.title,
       csrfToken: req.res?.locals.csrfToken,
       resource: viewModel,
       availableCopy,
-      alert: req.query.alert as string | undefined,
+      alert,
+      showHoldPoll: alert === 'reserved' || alert === 'conflict',
+      returnPath: `/resources/${id.toString()}`,
+    });
+  }
+
+  /**
+   * HTMX partial: current queue position for the signed-in member.
+   * Polls without a SPA — same ReservationQueueService as enqueue.
+   */
+  @Get(':id/hold-status')
+  @UseGuards(WebAuthGuard, LoadMemberGuard)
+  async holdStatus(
+    @Param('id', ParseBigIntPipe) id: bigint,
+    @CurrentMember() member: Member,
+    @Res() res: Response,
+  ): Promise<void> {
+    const hold = await this.reservationQueueService.findActiveForMember(
+      id,
+      member.id,
+    );
+    res.render('resources/hold-status', {
+      layout: false,
+      resourceId: id.toString(),
+      hold: hold
+        ? {
+            id: hold.id.toString(),
+            position: hold.queuePosition,
+            status: hold.status,
+          }
+        : null,
     });
   }
 
@@ -120,9 +151,10 @@ export class WebResourceController {
       throw new NotFoundException('Copy was not found for this book.');
     }
     if (copy.version !== submittedVersion || copy.status !== 'AVAILABLE') {
-      throw new ConflictException(
-        'This copy changed since the page was loaded. Refresh and try again.',
-      );
+      throw new ConflictException({
+        message: 'This copy changed since the page was loaded. Refresh and try again.',
+        returnTo: `/resources/${id.toString()}`,
+      });
     }
 
     try {
@@ -134,9 +166,11 @@ export class WebResourceController {
         error instanceof NoAvailableCopyException ||
         error instanceof ConcurrentModificationException
       ) {
-        throw new ConflictException(
-          'Someone else borrowed or changed this copy first. Refresh and try again.',
-        );
+        throw new ConflictException({
+          message:
+            'Someone else borrowed or changed this copy first. Refresh and try again.',
+          returnTo: `/resources/${id.toString()}`,
+        });
       }
       throw error;
     }
@@ -159,7 +193,10 @@ export class WebResourceController {
       entity,
     );
     if (!decision.allowed) {
-      throw new ConflictException(decision.reason);
+      throw new ConflictException({
+        message: decision.reason,
+        returnTo: `/resources/${id.toString()}`,
+      });
     }
 
     await this.reservationQueueService.enqueue(id, member.id);

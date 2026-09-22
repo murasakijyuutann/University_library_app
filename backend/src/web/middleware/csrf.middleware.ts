@@ -14,7 +14,11 @@ export class CsrfMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction): void {
     const path = (req.originalUrl ?? req.url ?? req.path).split('?')[0];
-    if (path.startsWith('/api') || path.startsWith('/auth')) {
+    if (
+      path.startsWith('/api') ||
+      path.startsWith('/auth') ||
+      path.startsWith('/_local-storage')
+    ) {
       next();
       return;
     }

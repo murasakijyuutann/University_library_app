@@ -24,6 +24,7 @@ Design and build artifacts for the University Library Portal. The project overvi
 | [`search-interface-contract.md`](search-interface-contract.md) | Swappable `UnifiedSearchService` contract |
 | [`deployment-blueprint.md`](deployment-blueprint.md) | Production deploy / CI reasoning |
 | [`aws-cloud-infrastructure-plan.md`](aws-cloud-infrastructure-plan.md) | Concrete AWS plan (not yet provisioned) |
+| [`phase6-e2e-troubleshooting.md`](phase6-e2e-troubleshooting.md) | CSRF / Handlebars e2e collapse post-mortem |
 
 ## Historical / superseded
 

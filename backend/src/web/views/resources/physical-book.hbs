@@ -33,4 +33,15 @@
       </form>
     {{/if}}
   </div>
+  {{#if showHoldPoll}}
+    <section
+      class="filter-panel"
+      style="margin-top:1.5rem"
+      hx-get="/resources/{{resource.id}}/hold-status"
+      hx-trigger="load, every 5s"
+      hx-swap="innerHTML"
+    >
+      <p class="lede">Checking your hold position…</p>
+    </section>
+  {{/if}}
 {{/layouts/main}}

@@ -17,6 +17,7 @@ import { MemberModule } from './member/member.module';
 import { NotificationModule } from './notification/notification.module';
 import { AuditModule } from './audit/audit.module';
 import { SearchModule } from './search/search.module';
+import { StorageModule } from './storage/storage.module';
 import { WebModule } from './web/web.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { WebModule } from './web/web.module';
     // Public search route throttling (Phase 5.4, build-guide.md) — bound
     // globally now, applied selectively once the search controller exists.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    StorageModule.forRoot(),
     CommonModule,
     PrismaModule,
     ResourceModule,

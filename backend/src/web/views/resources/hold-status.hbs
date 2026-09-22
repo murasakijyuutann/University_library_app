@@ -1,0 +1,12 @@
+{{#if hold}}
+  <h2 class="resource-summary__title">Your hold</h2>
+  <dl class="resource-summary">
+    <div><strong>Queue position</strong> {{hold.position}}</div>
+    <div><strong>Status</strong>
+      <span class="status-badge status-badge--warn">{{hold.status}}</span>
+    </div>
+  </dl>
+  <p class="lede">Updates every few seconds without a full page reload.</p>
+{{else}}
+  <p class="lede">No active hold on this title for your account.</p>
+{{/if}}

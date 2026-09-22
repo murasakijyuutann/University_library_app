@@ -55,6 +55,8 @@ export class E2eTestContext {
     process.env.NODE_ENV = 'development';
     process.env.JWT_PUBLIC_KEY_SOURCE = 'static';
     process.env.MOCK_IDP_SIGNING_SECRET = E2E_MOCK_IDP_SECRET;
+    process.env.STORAGE_DRIVER = 'local';
+    process.env.STORAGE_LOCAL_SIGNING_SECRET = E2E_MOCK_IDP_SECRET;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

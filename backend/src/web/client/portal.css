@@ -324,3 +324,15 @@ a {
   color: var(--color-ink);
   font-size: 0.85rem;
 }
+
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.upload-progress progress {
+  flex: 1;
+  height: 0.65rem;
+}

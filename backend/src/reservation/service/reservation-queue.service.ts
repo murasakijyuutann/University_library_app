@@ -87,6 +87,18 @@ export class ReservationQueueService {
       data: { status: ReservationStatus.CANCELLED },
     });
   }
+
+  /** Active hold for a member on a resource — used by the portal HTMX poll. */
+  async findActiveForMember(resourceId: bigint, memberId: bigint) {
+    return this.prisma.reservation.findFirst({
+      where: {
+        resourceId,
+        memberId,
+        status: { in: ACTIVE_QUEUE_STATUSES },
+      },
+      orderBy: { queuedAt: 'desc' },
+    });
+  }
 }
 
 function isQueuePositionCollision(error: unknown): boolean {

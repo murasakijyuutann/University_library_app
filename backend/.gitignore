@@ -27,5 +27,8 @@ npm-debug.log*
 .env
 .env.*.local
 
+# Local object-storage driver (Phase 6.5 dev/e2e)
+.local-storage
+
 # Prisma
 prisma/dev.db

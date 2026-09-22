@@ -224,6 +224,11 @@ describe('API routes (Phase 4.1)', () => {
     });
 
     it('POST /api/thesis-submissions/:id/transition submits the draft (student)', async () => {
+      await ctx.prisma.thesisSubmission.update({
+        where: { id: BigInt(submissionId) },
+        data: { filePath: `theses/${submissionId}/api-e2e.pdf` },
+      });
+
       await request(ctx.app.getHttpServer())
         .post(`/api/thesis-submissions/${submissionId}/transition`)
         .set(ctx.authHeader(studentToken))

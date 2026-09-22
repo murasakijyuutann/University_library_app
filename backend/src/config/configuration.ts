@@ -15,6 +15,14 @@ export interface AppConfig {
     csrfCookieName: string;
     cookieSecure: boolean;
   };
+  storage: {
+    /** `local` for dev/e2e; `s3` for production presigned PUT. */
+    driver: 'local' | 's3';
+    localRoot: string;
+    localSigningSecret: string;
+    s3Bucket: string;
+    s3Region: string;
+  };
 }
 
 // Typed config loader consumed by ConfigModule.forRoot({ load: [configuration] }).
@@ -35,5 +43,15 @@ export default registerAs('app', (): AppConfig => ({
     sessionCookieName: process.env.WEB_SESSION_COOKIE ?? 'library_token',
     csrfCookieName: process.env.WEB_CSRF_COOKIE ?? 'csrf_token',
     cookieSecure: process.env.NODE_ENV === 'production',
+  },
+  storage: {
+    driver: process.env.STORAGE_DRIVER === 's3' ? 's3' : 'local',
+    localRoot: process.env.STORAGE_LOCAL_ROOT ?? '.local-storage',
+    localSigningSecret:
+      process.env.STORAGE_LOCAL_SIGNING_SECRET ??
+      process.env.MOCK_IDP_SIGNING_SECRET ??
+      '',
+    s3Bucket: process.env.STORAGE_S3_BUCKET ?? '',
+    s3Region: process.env.STORAGE_S3_REGION ?? '',
   },
 }));

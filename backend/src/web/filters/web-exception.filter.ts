@@ -18,20 +18,31 @@ export class WebExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
 
-    if (request.path.startsWith('/api') || request.path.startsWith('/auth/mock-idp')) {
+    if (response.headersSent) {
+      return;
+    }
+
+    if (
+      request.path.startsWith('/api') ||
+      request.path.startsWith('/auth/mock-idp') ||
+      request.path.startsWith('/_local-storage')
+    ) {
       const status = exception.getStatus();
       response.status(status).json(exception.getResponse());
       return;
     }
 
     const status = exception.getStatus();
-    const message =
-      typeof exception.getResponse() === 'string'
-        ? (exception.getResponse() as string)
-        : ((exception.getResponse() as { message?: string | string[] }).message ??
-          exception.message);
-
+    const raw = exception.getResponse();
+    const payload =
+      typeof raw === 'string'
+        ? { message: raw }
+        : (raw as { message?: string | string[]; returnTo?: string });
+    const message = payload.message ?? exception.message;
     const text = Array.isArray(message) ? message.join(', ') : String(message);
+    const returnTo =
+      payload.returnTo ??
+      (typeof request.headers.referer === 'string' ? request.headers.referer : undefined);
 
     if (exception instanceof UnauthorizedException) {
       response.redirect(`/login?next=${encodeURIComponent(request.originalUrl)}`);
@@ -42,6 +53,7 @@ export class WebExceptionFilter implements ExceptionFilter {
       response.status(409).render('errors/conflict', {
         title: 'Conflict',
         message: text,
+        returnTo,
         csrfToken: response.locals.csrfToken,
       });
       return;

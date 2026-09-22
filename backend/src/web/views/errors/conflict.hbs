@@ -1,5 +1,12 @@
 {{#> layouts/main}}
   <h1 class="page-title">{{title}}</h1>
-  <div class="alert">{{message}}</div>
-  <a class="button button--primary" href="javascript:history.back()">Go back</a>
+  <div class="alert alert--danger" role="alert">{{message}}</div>
+  <p class="lede">Someone else changed this record first. Reload the page for the current state, then try again.</p>
+  <div class="action-group">
+    {{#if returnTo}}
+      <a class="button button--primary" href="{{returnTo}}">Refresh and continue</a>
+    {{else}}
+      <a class="button button--primary" href="javascript:history.back()">Go back</a>
+    {{/if}}
+  </div>
 {{/layouts/main}}

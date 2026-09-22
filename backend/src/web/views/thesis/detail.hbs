@@ -1,9 +1,55 @@
 {{#> layouts/main}}
   <h1 class="page-title">{{title}}</h1>
+  {{#if alert}}
+    <div class="alert alert--success">{{alert}}</div>
+  {{/if}}
   <dl class="resource-summary">
     <div><strong>Id</strong> {{submission.id}}</div>
-    <div><strong>Status</strong> {{submission.status}}</div>
+    <div><strong>Status</strong>
+      <span class="status-badge status-badge--warn">{{submission.status}}</span>
+    </div>
     <div><strong>Degree</strong> {{submission.degreeType}}</div>
+    <div><strong>PDF</strong>
+      {{#if submission.filePath}}
+        <code>{{submission.filePath}}</code>
+      {{else}}
+        <em>Not attached</em>
+      {{/if}}
+    </div>
   </dl>
-  <p class="lede">Full supervisor workflow and presigned upload land in a later Phase 6 slice.</p>
+
+  {{#if submission.canUpload}}
+    <section
+      class="filter-panel thesis-upload"
+      data-thesis-upload
+      data-submission-id="{{submission.id}}"
+      data-csrf="{{csrfToken}}"
+      data-upload-url="/thesis-submissions/{{submission.id}}/upload-url"
+      data-confirm-url="/thesis-submissions/{{submission.id}}/confirm-upload"
+    >
+      <h2 class="resource-summary__title">Upload PDF</h2>
+      <p class="lede">The browser uploads directly to object storage via a short-lived URL. Nest only stores the resulting key.</p>
+      <div class="form-field">
+        <label for="thesis-file">Thesis PDF</label>
+        <input id="thesis-file" type="file" accept="application/pdf,.pdf" data-thesis-file />
+      </div>
+      <div class="upload-progress" hidden data-thesis-progress-wrap>
+        <progress max="100" value="0" data-thesis-progress></progress>
+        <span data-thesis-progress-label>0%</span>
+      </div>
+      <p class="alert alert--danger" hidden data-thesis-error></p>
+      <div class="action-group">
+        <button class="button button--primary" type="button" data-thesis-start>Upload</button>
+        <button class="button button--secondary" type="button" data-thesis-cancel hidden>Cancel</button>
+        <button class="button button--secondary" type="button" data-thesis-retry hidden>Retry</button>
+      </div>
+    </section>
+  {{/if}}
+
+  {{#if submission.canSubmit}}
+    <form method="post" action="/thesis-submissions/{{submission.id}}/submit" class="action-group">
+      <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+      <button class="button button--primary" type="submit">Submit for review</button>
+    </form>
+  {{/if}}
 {{/layouts/main}}
