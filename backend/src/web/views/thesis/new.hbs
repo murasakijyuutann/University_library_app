@@ -1,0 +1,15 @@
+{{#> layouts/main}}
+  <h1 class="page-title">{{title}}</h1>
+  <form method="post" action="/thesis-submissions" class="filter-panel" style="max-width:28rem">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+    <div class="form-field">
+      <label for="degreeType">Degree type</label>
+      <select id="degreeType" name="degreeType">
+        {{#each degreeTypes}}
+          <option value="{{this}}">{{this}}</option>
+        {{/each}}
+      </select>
+    </div>
+    <button class="button button--primary" type="submit">Create draft</button>
+  </form>
+{{/layouts/main}}

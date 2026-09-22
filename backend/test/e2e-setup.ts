@@ -1,6 +1,11 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Member, MemberType, Role } from '@prisma/client';
+import * as cookieParser from 'cookie-parser';
+import * as express from 'express';
+import * as hbs from 'hbs';
+import { join } from 'path';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -26,12 +31,7 @@ export interface E2eSeedData {
 }
 
 /**
- * Phase 4 e2e harness (build-guide.md): boots the full Nest app against a
- * disposable Testcontainers Postgres instance — the same migration history and
- * dependency shape as production, but with a known mock IdP secret for auth.
- *
- * PrismaService is overridden with the harness client so the app and seed
- * share one connection to the container (env alone is brittle under Jest).
+ * Boots the full Nest app (API + Phase 6 HTML) against Testcontainers Postgres.
  */
 export class E2eTestContext {
   private integrationCtx!: IntegrationTestContext;
@@ -63,15 +63,29 @@ export class E2eTestContext {
       .useValue(this.integrationCtx.prisma)
       .compile();
 
-    this.app = moduleFixture.createNestApplication();
-    this.app.useGlobalPipes(
+    const app = moduleFixture.createNestApplication<NestExpressApplication>();
+    app.use(cookieParser());
+    app.use(express.urlencoded({ extended: true }));
+
+    const viewsPath = join(__dirname, '..', 'src', 'web', 'views');
+    const publicPath = join(__dirname, '..', 'src', 'web', 'public');
+    app.setBaseViewsDir(viewsPath);
+    app.setViewEngine('hbs');
+    hbs.registerPartials(join(viewsPath, 'partials'));
+    hbs.registerPartials(join(viewsPath, 'layouts'));
+    hbs.registerPartials(join(viewsPath, 'resources'));
+    hbs.registerPartials(join(viewsPath, 'search'));
+    app.useStaticAssets(publicPath);
+
+    app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
         transform: true,
       }),
     );
-    await this.app.init();
+    await app.init();
+    this.app = app;
 
     this.seed = await this.seedData();
   }

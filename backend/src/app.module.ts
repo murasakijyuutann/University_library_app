@@ -17,6 +17,7 @@ import { MemberModule } from './member/member.module';
 import { NotificationModule } from './notification/notification.module';
 import { AuditModule } from './audit/audit.module';
 import { SearchModule } from './search/search.module';
+import { WebModule } from './web/web.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SearchModule } from './search/search.module';
     NotificationModule,
     AuditModule,
     SearchModule,
+    WebModule,
   ],
   controllers: [HealthController],
   providers: [],

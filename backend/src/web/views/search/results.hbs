@@ -1,0 +1,39 @@
+<p><strong>{{totalMatches}}</strong> matches</p>
+
+{{#if facets.length}}
+  <ul class="facet-list" aria-label="Resource type facets">
+    {{#each facets}}
+      <li>
+        <a href="/search?type={{value}}{{../queryString}}"
+           hx-get="/search/results?type={{value}}{{../queryString}}"
+           hx-target="#search-results"
+           hx-push-url="true">{{value}} ({{count}})</a>
+      </li>
+    {{/each}}
+  </ul>
+{{/if}}
+
+<div class="stack" style="margin-top:1rem">
+  {{#each items}}
+    {{> (lookup this "partial") resource=viewModel}}
+  {{else}}
+    <p class="lede">No results. Try a broader query.</p>
+  {{/each}}
+</div>
+
+<nav class="pagination" aria-label="Pagination">
+  {{#if prevPage}}
+    <a class="button button--secondary"
+       href="/search?page={{prevPage}}{{queryString}}"
+       hx-get="/search/results?page={{prevPage}}{{queryString}}"
+       hx-target="#search-results"
+       hx-push-url="true">Previous</a>
+  {{/if}}
+  {{#if nextPage}}
+    <a class="button button--secondary"
+       href="/search?page={{nextPage}}{{queryString}}"
+       hx-get="/search/results?page={{nextPage}}{{queryString}}"
+       hx-target="#search-results"
+       hx-push-url="true">Next</a>
+  {{/if}}
+</nav>

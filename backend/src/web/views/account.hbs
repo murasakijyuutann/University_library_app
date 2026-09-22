@@ -1,0 +1,13 @@
+{{#> layouts/main}}
+  <h1 class="page-title">{{title}}</h1>
+  <dl class="resource-summary">
+    <div><strong>Name</strong> {{member.fullName}}</div>
+    <div><strong>Email</strong> {{member.email}}</div>
+    <div><strong>Role</strong> {{member.role}}</div>
+    <div><strong>Faculty</strong> {{member.faculty}}</div>
+  </dl>
+  <form method="post" action="/logout">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+    <button class="button button--secondary" type="submit">Sign out</button>
+  </form>
+{{/layouts/main}}

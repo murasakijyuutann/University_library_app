@@ -32,7 +32,7 @@ Two equal goals shape the stack:
 
 ## Status
 
-**Backend Phases 0–5 are complete.** Phase 6 is the **server-rendered HTML portal** (not a React SPA). Phase 7 is operational hardening.
+**Backend Phases 0–5 are complete.** Phase 6 (server-rendered HTML portal) is **in progress** — scaffold, search, auth cookies/CSRF, resource detail, and thesis draft are wired. Phase 7 is operational hardening.
 
 | Phase | Focus | Status |
 |---|---|---|
@@ -42,7 +42,7 @@ Two equal goals shape the stack:
 | 3 | `AccessPolicyResolver` + state-transition validators | Done |
 | 4 | REST API + JWT SSO relying-party + mock IdP | Done |
 | 5 | Faceted search behind `UnifiedSearchService` | Done |
-| 6 | NestJS MVC + Handlebars + selective HTMX | Next |
+| 6 | NestJS MVC + Handlebars + selective HTMX | In progress |
 | 7 | Audit, notifications, policy-as-data, deploy | Planned |
 
 Build order and exit criteria: [`docs/build-guide.md`](docs/build-guide.md).
@@ -88,7 +88,7 @@ Details: [`docs/data-provenance-and-ingestion_v2.md`](docs/data-provenance-and-i
 
 ```
 ├── README.md                 ← you are here
-├── backend/                  ← NestJS API (Phases 0–4 live here)
+├── backend/                  ← NestJS API + HTML portal (Phases 0–6)
 │   ├── prisma/               ← schema + migrations
 │   ├── src/                  ← domain modules (resource, loan, …)
 │   └── test/                 ← unit / integration / e2e

@@ -36,6 +36,10 @@ export class ThesisSubmissionService {
     });
   }
 
+  async findById(submissionId: bigint) {
+    return this.prisma.thesisSubmission.findUnique({ where: { id: submissionId } });
+  }
+
   async transition(submissionId: bigint, to: SubmissionStatus) {
     const submission = await this.prisma.thesisSubmission.findUnique({
       where: { id: submissionId },

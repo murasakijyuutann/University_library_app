@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}} · University Library</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/portal.css" />
+    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+    <script src="/assets/portal.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">University Library</a>
+      <nav class="nav" aria-label="Primary">
+        <a href="/search">Search</a>
+        <a href="/thesis-submissions/new">Thesis</a>
+        <a href="/account">Account</a>
+        <a href="/login">Sign in</a>
+      </nav>
+    </header>
+    <main class="main">
+      {{> @partial-block }}
+    </main>
+    <footer class="site-footer">
+      Institutional repository · license gateway · discovery portal
+    </footer>
+  </body>
+</html>

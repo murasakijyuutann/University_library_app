@@ -1,0 +1,36 @@
+{{#> layouts/main}}
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/search">Search</a>
+    <span>/</span>
+    <span>{{resource.title}}</span>
+  </nav>
+  {{#if alert}}
+    <div class="alert alert--success">{{alert}}</div>
+  {{/if}}
+  <h1 class="page-title">{{resource.title}}</h1>
+  <p class="lede">{{resource.typeLabel}}
+    {{#if resource.department}} · {{resource.department}}{{/if}}
+  </p>
+  <span class="status-badge status-badge--{{resource.accessStatusTone}}">{{resource.accessStatusLabel}}</span>
+  <dl class="resource-summary" style="margin-top:1rem">
+    <div><strong>Author</strong> {{resource.author}}</div>
+    <div><strong>ISBN</strong> {{resource.isbn}}</div>
+    <div><strong>Year</strong> {{resource.publicationYear}}</div>
+  </dl>
+  <div class="action-group">
+    {{#if availableCopy}}
+      <form method="post" action="/resources/{{resource.id}}/borrow">
+        <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+        <input type="hidden" name="copyId" value="{{availableCopy.id}}" />
+        <input type="hidden" name="copyVersion" value="{{availableCopy.version}}" />
+        <button class="button button--primary" type="submit">Borrow</button>
+      </form>
+    {{/if}}
+    {{#if resource.canReserve}}
+      <form method="post" action="/resources/{{resource.id}}/reserve">
+        <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+        <button class="button button--secondary" type="submit">Place hold</button>
+      </form>
+    {{/if}}
+  </div>
+{{/layouts/main}}

@@ -1,0 +1,9 @@
+<article class="resource-summary">
+  <h2 class="resource-summary__title"><a href="{{resource.detailUrl}}">{{resource.title}}</a></h2>
+  <p class="resource-summary__meta">
+    Physical book
+    {{#if resource.author}} · {{resource.author}}{{/if}}
+    {{#if resource.publicationYear}} · {{resource.publicationYear}}{{/if}}
+  </p>
+  <span class="status-badge status-badge--{{resource.accessStatusTone}}">{{resource.accessStatusLabel}}</span>
+</article>

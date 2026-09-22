@@ -1,0 +1,40 @@
+{{#> layouts/main}}
+  <h1 class="page-title">{{title}}</h1>
+  <p class="lede">URL-addressable facets and pagination. HTMX enhances results without a client router.</p>
+
+  <form
+    class="filter-panel"
+    method="get"
+    action="/search"
+    hx-get="/search/results"
+    hx-target="#search-results"
+    hx-push-url="true"
+  >
+    <div class="filter-panel__grid">
+      <div class="form-field">
+        <label for="q">Query</label>
+        <input id="q" name="q" value="{{q}}" placeholder="algorithms, Tanaka, DOI…" />
+      </div>
+      <div class="form-field">
+        <label for="type">Type</label>
+        <select id="type" name="type">
+          <option value="">Any</option>
+          <option value="PHYSICAL_BOOK">Physical book</option>
+          <option value="THESIS">Thesis</option>
+          <option value="JOURNAL_ARTICLE">Journal article</option>
+          <option value="RESEARCH_REPORT">Research report</option>
+          <option value="RARE_MATERIAL">Rare material</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="department">Department</label>
+        <input id="department" name="department" value="{{department}}" />
+      </div>
+    </div>
+    <button class="button button--primary" type="submit">Search</button>
+  </form>
+
+  <div id="search-results">
+    {{> search/results}}
+  </div>
+{{/layouts/main}}

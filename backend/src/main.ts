@@ -1,12 +1,30 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
+import * as express from 'express';
+import * as hbs from 'hbs';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/configuration';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.use(cookieParser());
+  app.use(express.urlencoded({ extended: true }));
+
+  const viewsPath = join(__dirname, 'web', 'views');
+  const publicPath = join(__dirname, 'web', 'public');
+  app.setBaseViewsDir(viewsPath);
+  app.setViewEngine('hbs');
+  hbs.registerPartials(join(viewsPath, 'partials'));
+  hbs.registerPartials(join(viewsPath, 'layouts'));
+  hbs.registerPartials(join(viewsPath, 'resources'));
+  hbs.registerPartials(join(viewsPath, 'search'));
+  app.useStaticAssets(publicPath);
 
   app.useGlobalPipes(
     new ValidationPipe({

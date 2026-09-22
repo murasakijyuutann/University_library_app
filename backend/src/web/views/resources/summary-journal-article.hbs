@@ -1,0 +1,7 @@
+<article class="resource-summary">
+  <h2 class="resource-summary__title"><a href="{{resource.detailUrl}}">{{resource.title}}</a></h2>
+  <p class="resource-summary__meta">
+    Journal article{{#if resource.doi}} · {{resource.doi}}{{/if}}
+  </p>
+  <span class="status-badge status-badge--{{resource.accessStatusTone}}">{{resource.accessStatusLabel}}</span>
+</article>

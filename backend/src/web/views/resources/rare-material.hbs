@@ -1,0 +1,6 @@
+{{#> layouts/main}}
+  <nav class="breadcrumb"><a href="/search">Search</a> / <span>{{resource.title}}</span></nav>
+  <h1 class="page-title">{{resource.title}}</h1>
+  <span class="status-badge status-badge--{{resource.accessStatusTone}}">{{resource.accessStatusLabel}}</span>
+  <p class="lede">Reading-room only{{#if resource.readingRoomOnly}} (supervised){{/if}}.</p>
+{{/layouts/main}}

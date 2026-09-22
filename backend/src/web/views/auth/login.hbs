@@ -1,0 +1,28 @@
+{{#> layouts/main}}
+  <h1 class="page-title">{{title}}</h1>
+  {{#if error}}
+    <div class="alert alert--danger" role="alert">{{error}}</div>
+  {{/if}}
+  <form method="post" action="/login" class="filter-panel" style="max-width:28rem">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+    <input type="hidden" name="next" value="{{next}}" />
+    <div class="form-field">
+      <label for="sub">SSO subject id</label>
+      <input id="sub" name="sub" required placeholder="e2e-student-subject" />
+    </div>
+    <div class="form-field">
+      <label for="role">Role claim</label>
+      <select id="role" name="role">
+        {{#each roles}}
+          <option value="{{this}}">{{this}}</option>
+        {{/each}}
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="faculty">Faculty (optional)</label>
+      <input id="faculty" name="faculty" placeholder="Computer Science" />
+    </div>
+    <button class="button button--primary" type="submit">Sign in</button>
+  </form>
+  <p class="lede">Dev only — provisions against a Member row matching the SSO subject.</p>
+{{/layouts/main}}

@@ -1,0 +1,9 @@
+{{#> layouts/main}}
+  <nav class="breadcrumb"><a href="/search">Search</a> / <span>{{resource.title}}</span></nav>
+  <h1 class="page-title">{{resource.title}}</h1>
+  <span class="status-badge status-badge--{{resource.accessStatusTone}}">{{resource.accessStatusLabel}}</span>
+  <dl class="resource-summary" style="margin-top:1rem">
+    <div><strong>Scope</strong> {{resource.departmentScope}}</div>
+    <div><strong>Year</strong> {{resource.reportYear}}</div>
+  </dl>
+{{/layouts/main}}

@@ -1,0 +1,9 @@
+{{#> layouts/main}}
+  <nav class="breadcrumb"><a href="/search">Search</a> / <span>{{resource.title}}</span></nav>
+  <h1 class="page-title">{{resource.title}}</h1>
+  <span class="status-badge status-badge--{{resource.accessStatusTone}}">{{resource.accessStatusLabel}}</span>
+  <dl class="resource-summary" style="margin-top:1rem">
+    <div><strong>DOI</strong> {{resource.doi}}</div>
+    <div><strong>Volume / issue</strong> {{resource.volume}} / {{resource.issue}}</div>
+  </dl>
+{{/layouts/main}}
