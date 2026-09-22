@@ -85,31 +85,66 @@ Map the relational schema to TypeScript with strong type safety, own the migrati
 
 ---
 
-## 3. Frontend: Vite + React + TypeScript (SPA)
+## 3. Frontend: NestJS MVC + Handlebars + custom CSS + selective HTMX
 
 ### The problem it has to solve
 
-Render five heterogeneous resource types without conflating them, hold and send a JWT on authenticated requests, and provide interactive views (live reservation queues, librarian dashboards). Access decisions are made and enforced by the NestJS backend; the frontend's job is to be a correct, type-safe, low-friction client — not a second place where authorization is reasoned about.
+Most portal interactions are **navigation, structured search, and state-changing forms** — not long-lived client-side workflows. The UI must render five heterogeneous resource types without conflating them, support dense staff screens (tables, facets, status badges, approval actions), and keep contested mutations (borrow, reserve, renew, approve) correct under concurrency. Access decisions and state transitions remain owned by NestJS domain services; the presentation layer formats and displays — it does not become a second authorization brain.
 
-### Why a plain Vite SPA fits
+### Why server-rendered HTML fits (and a React SPA does not)
 
-**The backend is the single auth authority, and an SPA keeps it that way.** Enforcement lives on NestJS regardless of frontend framework. An SPA simply doesn't fetch gated content until the backend authorizes the request, and the backend never returns restricted content without a valid token. There is no second server-side trust boundary to design, secure, and keep in sync with the real one.
+**The interaction shape does not earn a SPA.** Catalog search, resource detail, thesis review, and reservation actions are request/response workflows with URL-addressable state. A client-side router, global store, and API-token holder add machinery without matching need. React is unnecessary here — not because React is bad, but because this product is not a long-lived client application.
 
-**Shared TypeScript across the wire is now a first-class benefit, not a side effect.** With NestJS also in TypeScript, the discriminated-union `ResourceSummaryDto`, the DTO shapes, and the Zod validation schemas can be genuinely shared vocabulary between backend and frontend. This is where the single-language stack pays off concretely — one definition of the resource-type union, enforced on both sides.
+**TypeScript safety moves to view-models and presenters, not to JSX.** Handlebars templates are untyped, so exhaustiveness over the five resource types is enforced in TypeScript *before* render: presenters map domain results to a discriminated `ResourcePageViewModel` union, and a `Record<ResourcePageViewModel['type'], templateName>` mapping fails to compile if a subtype is missing. Prisma rows never enter templates; presenters own dates, labels, URLs, and *visible* actions. Visible actions are UX only — every mutation re-checks identity, authorization, and current state in the service.
 
-**One rendering mode is the right amount of mode for this app.** Gated academic access isn't SEO-indexed, so server-side rendering buys nothing — there's no public, crawlable surface needing pre-rendering. Client-rendering everything, with the backend gating data, matches the domain without adding a rendering-strategy matrix.
+**Correctness does not depend on rendering mode.** Server HTML does not magically guarantee fresh state. Contested updates still use optimistic/pessimistic concurrency (submitted `version` + conditional update / transactional lock). Stale submits return **409 Conflict** with the new state; successful POSTs redirect with **303 See Other**. HTMX may replace a partial; it must call the same service path and concurrency checks as a full form post.
+
+**Same-origin auth fits the delivery model.** With HTML served from NestJS, prefer **HttpOnly Secure session cookies** (JWT or opaque session referencing verified SSO claims) over a JavaScript-held bearer token. State-changing forms need **CSRF protection**. The `PublicKeyProvider` seam (mock static key ↔ IdP JWKS) still validates identity at the boundary; only the transport to the browser changes.
+
+### CSS: a small custom system, not Bootstrap or Pico
+
+Staff screens need dense tables, facet panels, status badges, pagination, action groups, and destructive confirms. Bootstrap’s visual and component assumptions are broader than needed; Pico’s global element styling tends to get overridden until the “lightweight” win disappears. Prefer a deliberately small set of semantic primitives backed by CSS custom properties:
+
+`button`, `button--primary|secondary|danger`, `action-group`, `form-field`, `filter-panel`, `data-table`, `status-badge`, `alert`, `pagination`, `breadcrumb`, `resource-summary`.
+
+Vite (or equivalent) builds **assets only** — CSS and small TypeScript modules — not an application shell.
+
+### Progressive enhancement boundaries
+
+| Layer | Role |
+|---|---|
+| Handlebars | Full pages and partials; ordinary `action`/`method` forms and links first |
+| HTMX (selective) | Search-result replacement, pagination, reservation-position refresh, renew/cancel, thesis status panel, dependent selects — never a separate business API |
+| Vanilla TypeScript modules | Exceptional client-heavy work: presigned thesis upload, progress, cancel, retry |
+
+No separate Express frontend. No client-side router. No global state store.
 
 ### Where alternatives create friction
 
-- **Next.js (App Router)** — its headline advantages don't pay off here. Server Components "not leaking restricted UI" reduces to almost nothing once the backend is the enforcement point and the SPA simply doesn't fetch gated data. SSR/ISR matters for public, indexable pages a gated academic tool doesn't have. And its auth story in front of a separate JWT-issuing API adds a second auth surface to model the very boundary the backend already owns. Next.js would be right only if showcasing modern-frontend technique (RSC/SSR/streaming) were itself a goal — for this project, the TypeScript-learning goal is better served by depth in the domain model and the shared-types boundary than by SSR machinery.
-- **Vue/Nuxt or Angular** — both bring SSR-first framings this app doesn't need; Angular additionally carries heavier tooling than the scope justifies.
+- **React / Vite SPA** — correct for rich client apps; here it forces a second auth surface (JS token holder), duplicates routing already owned by Nest, and invents client state for flows that are naturally form+redirect. Previously chosen; superseded by this section.
+- **Next.js** — SSR/RSC machinery and a second Node surface in front of Nest, without earning SEO or a public marketing site.
+- **Bootstrap / Pico as the design system** — either too broad or too opinionated for dense library staff UI once tables, facets, and workflow actions land.
+- **HTMX for everything** — becomes an ad-hoc RPC layer; constrain it to partial refresh of flows that already work as full page posts.
 
-### Supporting libraries
+### Presentation layout (target)
 
-- **React Router** — client-side routing for the SPA's views (catalog search, resource detail, thesis submission, librarian dashboard).
-- **TanStack Query** — the primary data-fetching layer: caching, request dedup, and polling for the live reservation queue.
-- **Auth: a lightweight token holder, not a framework.** The JWT from the (mock, later real) IdP is stored and attached to API calls via a fetch/Axios interceptor; refresh is a single call against the backend. The backend's `PublicKeyProvider` seam (static key in dev, JWKS in prod) is the only place IdP specifics live; the frontend stays ignorant of them.
-- **Zod** — validation shared between frontend forms and API request/response shaping, matching backend DTOs; pairs naturally with the discriminated-union summary type — and, in the single-language stack, can be literally the same schema on both sides.
+```
+src/web/
+├── controllers/
+├── presenters/
+├── view-models/
+└── views/
+    ├── layouts/
+    ├── partials/
+    └── resources/
+        ├── physical-book.hbs
+        ├── thesis.hbs
+        ├── journal-article.hbs
+        ├── research-report.hbs
+        └── rare-material.hbs
+```
+
+The existing JSON API (`/api/...`) remains useful for tooling, e2e, and any future non-HTML client; the human portal is HTML-first.
 
 ---
 
@@ -117,8 +152,8 @@ Render five heterogeneous resource types without conflating them, hold and send 
 
 This is not a claim of one correct stack — it's a set of choices under two goals held equally, and it's honest about where those goals pull apart.
 
-If demonstrating **senior backend domain modeling were the sole goal**, the backend should be Spring Boot: JPA's JOINED inheritance maps the resource hierarchy more cleanly than anything in the TypeScript ecosystem, and this design was originally built around exactly that. That option is set aside not because it's weaker on the merits — it's stronger on the modeling merits — but because it doesn't serve the second, equally-weighted goal of learning TypeScript deeply. Choosing NestJS + Prisma is therefore a deliberate trade: accept a hand-modeled hierarchy (harder, more code, tooling helping less) in exchange for a single-language stack that is a genuine TypeScript-learning vehicle end to end.
+If demonstrating **senior backend domain modeling were the sole goal**, the backend should be Spring Boot: JPA's JOINED inheritance maps the resource hierarchy more cleanly than anything in the TypeScript ecosystem, and this design was originally built around exactly that. That option is set aside not because it's weaker on the merits — it's stronger on the modeling merits — but because it doesn't serve the second, equally-weighted goal of learning TypeScript deeply. Choosing NestJS + Prisma is therefore a deliberate trade: accept a hand-modeled hierarchy (harder, more code, tooling helping less) in exchange for a TypeScript stack that is a genuine learning vehicle where types earn their keep (domain unions, view-models, API contracts).
 
-What makes the combination coherent despite that trade: PostgreSQL's fit is unchanged (the database doesn't care which ORM maps it), the frontend was already Vite/React/TypeScript, and NestJS preserves the architectural structure the Spring design established — so the senior-signal *architecture* survives even though the senior-signal *inheritance-mapping shortcut* does not. The compensating gain is real too: one language across the wire makes the discriminated-union resource model shared, enforced vocabulary rather than a shape re-described on each side.
+What makes the combination coherent despite that trade: PostgreSQL's fit is unchanged (the database doesn't care which ORM maps it), NestJS preserves the architectural structure the Spring design established, and the UI now matches the product's actual interaction shape — server-rendered forms and search — instead of a SPA assumed by default. The compensating gain on the presentation side is real too: resource-type exhaustiveness is enforced in presenters and template maps, while mutation correctness stays in services and concurrency controls regardless of whether the response is a full page or an HTMX fragment.
 
 If the domain were simple CRUD with one uniform access rule, this entire argument collapses and a far lighter stack would be the honest choice. It holds only because the resource hierarchy and access-contract variance are real, demonstrated requirements — and the hierarchy's difficulty under Prisma is, for the learning goal, a feature rather than a bug.

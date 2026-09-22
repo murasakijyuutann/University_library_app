@@ -78,7 +78,7 @@ export interface FacetCount {
 
 Note what is **absent**: there is no `score` field, and specifically no `ts_rank` float. This is deliberate and load-bearing (see 4.1). Result ordering is conveyed only by array position — first in the array is most relevant — not by an exposed numeric score.
 
-`ResourceSummaryDto` is the existing discriminated-union result shape from the project structure — the same polymorphic summary used across all `Resource` subtypes, keyed on `type`. Search returns it; search does not introduce a parallel result type. Because backend and frontend are both TypeScript, this is literally the same type on both sides of the wire.
+`ResourceSummaryDto` is the existing discriminated-union result shape from the project structure — the same polymorphic summary used across Resource subtypes, keyed on `type`. Search returns it; search does not introduce a parallel result type. HTML presenters map the same discriminant into Handlebars-oriented view-models (Phase 6); the API contract itself stays engine- and UI-agnostic.
 
 ---
 

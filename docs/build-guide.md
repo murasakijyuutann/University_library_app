@@ -210,41 +210,41 @@ Search returns paginated, faceted results over real data; `InMemorySearchService
 
 ---
 
-## Phase 6 — Frontend, in broad layers
+## Phase 6 — Server-rendered portal (Handlebars + HTMX)
 
-**Risk retired:** "does the one-definition-shared-across-the-wire model actually hold in practice."
-**Why now:** the API it consumes is proven and authenticated; the shared types it imports were defined back in Phase 1.
-**Depends on:** Phase 4 (the API + auth boundary) and Phase 5 (search, for the catalog view).
+**Risk retired:** "does the presentation layer stay thin while resource-type exhaustiveness and mutation freshness still hold."
+**Why now:** the domain, API, auth boundary, and search contract are proven; the human UI can consume them without inventing a second client architecture.
+**Depends on:** Phase 4 (auth + services) and Phase 5 (search).
 
 ### Tasks
 
-**6.1 — Scaffold the Vite/React/TypeScript SPA with the shared types.**
-Vite project, React Router, TanStack Query, the fetch/Axios interceptor that attaches the JWT. Import the `ResourceSummaryDto` discriminated union directly from the shared type definitions — do not re-describe it.
-*Check:* the app builds under `strict`; the imported union is the exact same type the backend returns.
-*Teaches:* the single-language payoff — one type definition, both sides; TanStack Query data fetching; SPA auth token handling.
+**6.1 — Scaffold NestJS MVC presentation (`src/web/`).**
+Handlebars view engine, layouts/partials, static asset pipeline (Vite as **asset builder** for CSS + small TS modules — not an SPA). Session cookie auth (HttpOnly, Secure) over the existing JWT/SSO verification seam; CSRF on state-changing forms.
+*Check:* a health/home HTML route renders; unauthenticated gated routes redirect to login; CSRF rejects a forged POST.
+*Teaches:* Nest MVC, cookie sessions vs bearer tokens, CSRF as a same-origin concern.
 
-**6.2 — Build catalog search (broad layer first).**
-The search view over the Phase 5 endpoint: query input, facet filters, paginated results rendering each resource type through the discriminated union.
-*Check:* all five resource types render with their correct type-specific summary; selecting a facet narrows results; rendering a wrong shape for a type is a compile error.
-*Teaches:* discriminated-union rendering in React; facet UI; the compile-time safety net catching the "journal-as-book" bug in the UI.
+**6.2 — View-models + presenters for the five resource types.**
+Discriminated `ResourcePageViewModel` union; presenters map domain entities → view-models (never Prisma rows in templates); `Record<ResourcePageViewModel['type'], template>` enforces exhaustiveness. Custom semantic CSS primitives (`button`, `filter-panel`, `data-table`, `status-badge`, …).
+*Check:* omitting a subtype breaks compilation; each variant has at least one rendering test; templates receive only view-models.
+*Teaches:* keeping TypeScript safety at the presenter boundary when templates are untyped.
 
-**6.3 — Build resource detail.**
-The per-resource detail view, narrowing to the concrete subtype and showing its type-specific fields and access status.
-*Check:* each type's detail view shows the right fields; access status reflects the backend's `AccessPolicyResolver` decision.
-*Teaches:* type narrowing at the component boundary; reflecting server-side authorization in the UI without re-implementing it.
+**6.3 — Catalog search (HTML-first, URL-addressable).**
+Server-rendered search form + results over `UnifiedSearchService`; facets and pagination as query params. Optional HTMX partial for results/pagination that calls the **same** search service.
+*Check:* all five types render via the correct partial; facet/page state survives a full reload without a client router; HTMX and full-page paths share one service call.
+*Teaches:* progressive enhancement; search state in the URL.
 
-**6.4 — Build the auth flow.**
-Login against the mock IdP (dev), token storage, authenticated requests, role-aware UI (librarian views vs student views).
-*Check:* logging in gates the right views; an expired/absent token routes to login.
-*Teaches:* SPA auth lifecycle; role-conditional rendering; keeping the frontend ignorant of IdP specifics.
+**6.4 — Resource detail + contested mutations with freshness.**
+Detail pages show access status and permitted *visible* actions. Forms submit resource/copy `version`; services reauthorize and conditional-update; **409** on conflict with refreshed state; **303 See Other** on success.
+*Check:* a stale version cannot complete borrow/reserve/renew; HTMX action endpoints use the same service methods as ordinary forms.
+*Teaches:* optimistic concurrency at the UI boundary; HTMX as presentation, not a second API.
 
-**6.5 — Build the workflow-heavy views last.**
-Thesis submission (the multi-step workflow) and the live reservation queue (position, availability). These are the most stateful and are built last, on top of everything proven.
-*Check:* a thesis can be submitted and moves through its states; the reservation queue reflects position and updates.
-*Teaches:* complex client state; forms and multi-step workflows; the reservation queue as the closest thing to a real-time surface (and the natural place to later add live updates).
+**6.5 — Workflow views last (thesis + reservation).**
+Thesis submission/review (HTML forms + status panel) and reservation queue (optional HTMX poll for position). Presigned thesis upload via a small vanilla TypeScript module (progress / cancel / retry).
+*Check:* a thesis moves through legal transitions end to end in the browser; reservation position updates without a SPA; upload never streams file bytes through Nest.
+*Teaches:* constrained HTMX; vanilla TS for the one client-heavy exception.
 
 ### Phase 6 exit criteria
-The SPA renders all five resource types correctly via the shared union, authenticates against the Phase 4 boundary, and drives the thesis-submission and reservation-queue workflows end to end. The shared-types benefit is visible and enforced on both sides.
+The portal renders all five resource types via exhaustively mapped templates, authenticates with same-origin cookies, and drives search, thesis, and reservation flows without a client router or global store. Mutation correctness is proven under concurrency (409/303), independent of full-page vs HTMX response shape.
 
 ---
 
@@ -295,7 +295,7 @@ Audit trail captures state transitions (with its coverage limit documented); not
 - *— hard core complete; risk essentially retired —*
 - **Phase 4** — expose it (API + auth).
 - **Phase 5** — search, behind its swappable contract.
-- **Phase 6** — the SPA, realizing the shared-types payoff.
+- **Phase 6** — the HTML portal (Handlebars + selective HTMX), realizing typed view-models and mutation freshness.
 - **Phase 7** — make it operable and close the loose ends.
 
 The property that makes this plan honest: risk decreases monotonically. By the time anything is exposed or rendered, the thing underneath is already proven — the inverse of the common failure where the demo works early and the hard parts detonate late. Each phase's exit criteria are the gate; a phase is done when its risk is dead, not when its code looks finished.

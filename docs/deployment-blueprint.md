@@ -72,7 +72,7 @@ Fargate tasks in the private subnet still need outbound internet access — SMTP
 
 ### API exposure
 
-An Application Load Balancer in front of the Fargate service handles TLS termination and routing. The frontend calls the ALB's endpoint, never individual container instances directly.
+An Application Load Balancer in front of the Fargate service handles TLS termination and routing. Browsers talk to NestJS (HTML + `/api`) through the ALB — not to a separate static SPA origin.
 
 ---
 
@@ -86,7 +86,7 @@ This applies uniformly across environments: even the dev-only `MockIdentityProvi
 
 ### DNS and TLS — Route 53, ACM
 
-Route 53 for DNS; ACM for the TLS certificate attached to the ALB listener. The frontend is a static Vite/React SPA — built to static assets and served from S3 behind CloudFront (its own ACM certificate at the edge), not a running server. The backend API still needs its own subdomain (e.g. `api.<project-domain>`) with a real certificate, since the SPA makes HTTPS calls to it directly.
+Route 53 for DNS; ACM for the TLS certificate attached to the ALB listener. **HTML is served by NestJS on Fargate** (Handlebars), not a separate SPA origin. Hashed CSS/JS assets from the Vite asset pipeline may be served from the same Nest static root or from S3 behind CloudFront; either way they are assets, not an application shell. A single public hostname (e.g. `library.<domain>`) is enough for the portal; a separate `api.` host remains optional for machine clients of the JSON API.
 
 ### Logging and monitoring — CloudWatch
 
@@ -107,25 +107,19 @@ The natural fit for `EmailNotificationService`'s actual delivery mechanism — A
                     │  Route 53 (DNS)  │
                     └────────┬─────────┘
                              │
-                    ┌────────▼──────────┐
-                    │  Vite/React SPA   │
-                    │  (S3 + CloudFront)│
-                    └────────┬──────────┘
-                             │ HTTPS
                     ┌────────▼─────────┐
                     │  ALB + ACM (TLS) │
                     └────────┬─────────┘
-                             │
+                             │ HTML + /api + static assets
                     ┌────────▼──────────────┐      ┌──────────────────┐
                     │  ECS Fargate          │◄─────┤  ECR (images)    │
-                    │  (NestJS / Node)      │      └──────────────────┘
+                    │  NestJS (MVC + API)   │      └──────────────────┘
                     └──┬────────┬───────┬───┘              ▲
                        │        │       │                  │ push on deploy
           ┌────────────▼──┐  ┌──▼────┐  │          ┌───────┴───────────┐
           │  RDS          │  │  S3   │  │          │  GitHub Actions   │
-          │  (private,    │  │       │  │          │  (CI/CD)          │
-          │  via NAT)     │  │       │  │          └───────────────────┘
-          └───────────────┘  └───────┘  │
+          │  (private)    │  │ docs  │  │          │  (CI/CD)          │
+          └───────────────┘  └───────┘  │          └───────────────────┘
                        │                │
                   ┌────▼────┐    ┌──────▼───────┐
                   │ Secrets │    │  SES (email) │
@@ -134,8 +128,10 @@ The natural fit for `EmailNotificationService`'s actual delivery mechanism — A
                        │
                   ┌────▼──────────┐
                   │  CloudWatch   │
-                  │  (logs/alarms)│
                   └───────────────┘
+
+Optional: CloudFront in front of ALB for TLS/caching, and/or CloudFront+S3
+for hashed CSS/JS only — never a separate React SPA origin.
 ```
 
 ---
@@ -183,22 +179,23 @@ beforeAll(async () => {
 afterAll(async () => { await container.stop(); });
 ```
 
-**Frontend job**
+**Presentation / asset job** (same repo as Nest once `src/web/` exists)
 
 ```yaml
-  frontend-verify:
+  web-verify:
     steps:
       - checkout
       - setup-node (20)
       - run: npm ci
-      - run: npm run typecheck   # tsc --noEmit
+      - run: npm run typecheck   # includes view-model exhaustiveness
       - run: npm run lint
-      - run: npm test
+      - run: npm test            # presenters + rendering tests
+      - run: npm run build:assets  # Vite asset pipeline (CSS/TS), not an SPA
 ```
 
-The typecheck step carries extra weight here: `ResourceSummaryDto` is a type-agnostic shape across five resource subtypes. A frontend type error in that shape could mean a journal article rendering as if it were a physical book, silently. TypeScript strictness is doing real domain-correctness work in this case, not just style enforcement.
+The typecheck step carries extra weight: omitting a resource subtype from the template map or view-model union is a compile error — the Handlebars templates themselves cannot enforce that. TypeScript strictness is doing real domain-correctness work at the presenter boundary.
 
-**Merge gate**: both jobs must pass. No "fix it after merge" exception — the gate's value depends on it being non-optional.
+**Merge gate**: backend and web-verify jobs must pass. No "fix it after merge" exception — the gate's value depends on it being non-optional.
 
 ### Stage 2 — Triggered on merge to main
 
@@ -253,7 +250,7 @@ ECS's ALB target group health check hits this endpoint before routing real traff
 PR opened
   │
   ├─► backend-verify (Jest unit + Testcontainers-for-Node integration tests)
-  └─► frontend-verify (typecheck + lint + test)
+  └─► web-verify (typecheck + lint + test + assets)
         │
         ▼ (both pass)
   Merge allowed
