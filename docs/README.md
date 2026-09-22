@@ -1,21 +1,27 @@
 # Documentation
 
-Design and build artifacts for the University Library Portal. The project overview, status, and quick start live in the root [`README.md`](../README.md).
+Design and build artifacts for the University Library Portal.
+
+**Root [`README.md`](../README.md):** deployment and full productization are postponed pending a serious rebuild.
+
+Former root overview (goals, phases, quick start): [`project-overview.md`](project-overview.md).
 
 ## Read in this order (recommended)
 
-1. **[`data-provenance-and-ingestion_v2.md`](data-provenance-and-ingestion_v2.md)** — own vs route; what the system *is*
-2. **[`stack-decision_v2.md`](stack-decision_v2.md)** — NestJS / Prisma / Postgres / Handlebars+HTMX and the inheritance tradeoff
-3. **[`project-structure_v3.md`](project-structure_v3.md)** — modules, API surface, schema
-4. **[`build-guide.md`](build-guide.md)** — phased implementation and exit criteria
-5. **[`search-design.md`](search-design.md)** + **[`search-interface-contract.md`](search-interface-contract.md)** — before Phase 5
-6. **[`deployment-blueprint.md`](deployment-blueprint.md)** + **[`aws-cloud-infrastructure-plan.md`](aws-cloud-infrastructure-plan.md)** — ops shape (design / proposed)
-7. **[`audit-coverage.md`](audit-coverage.md)** + **[`post-v1-deferred.md`](post-v1-deferred.md)** — Phase 7 audit boundary and deferred log
+1. **[`project-overview.md`](project-overview.md)** — goals, phase status, quick start (archived root README)
+2. **[`data-provenance-and-ingestion_v2.md`](data-provenance-and-ingestion_v2.md)** — own vs route; what the system *is*
+3. **[`stack-decision_v2.md`](stack-decision_v2.md)** — NestJS / Prisma / Postgres / Handlebars+HTMX and the inheritance tradeoff
+4. **[`project-structure_v3.md`](project-structure_v3.md)** — modules, API surface, schema
+5. **[`build-guide.md`](build-guide.md)** — phased implementation and exit criteria
+6. **[`search-design.md`](search-design.md)** + **[`search-interface-contract.md`](search-interface-contract.md)** — before Phase 5
+7. **[`deployment-blueprint.md`](deployment-blueprint.md)** + **[`aws-cloud-infrastructure-plan.md`](aws-cloud-infrastructure-plan.md)** — ops shape (design / proposed)
+8. **[`audit-coverage.md`](audit-coverage.md)** + **[`post-v1-deferred.md`](post-v1-deferred.md)** — Phase 7 audit boundary and deferred log
 
 ## Full map
 
 | Document | Role |
 |---|---|
+| [`project-overview.md`](project-overview.md) | Former root README — goals, status, quick start |
 | [`build-guide.md`](build-guide.md) | Task-level build order (Phases 0–7) |
 | [`data-provenance-and-ingestion_v2.md`](data-provenance-and-ingestion_v2.md) | Foundational own-vs-route model |
 | [`project-structure_v3.md`](project-structure_v3.md) | Backend layout and SQL schema |

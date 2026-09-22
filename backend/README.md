@@ -2,7 +2,7 @@
 
 NestJS + Prisma + PostgreSQL API for the university library portal.
 
-Project overview, goals, phase status, and documentation map: **[../README.md](../README.md)**.
+Project overview (archived): **[../docs/project-overview.md](../docs/project-overview.md)**. Root status: **[../README.md](../README.md)**.
 
 ## Setup
 
@@ -30,4 +30,4 @@ npm run start:dev
 | `npm run boundaries:check` | dependency-cruiser module boundaries |
 | `npm run db:up` / `db:down` | Local Postgres via Docker Compose |
 
-Auth in development uses `POST /auth/mock-idp/token` (see root README). Configure JWT via `.env` (`JWT_PUBLIC_KEY_SOURCE`, `MOCK_IDP_SIGNING_SECRET`, `JWKS_URI`).
+Auth in development uses `POST /auth/mock-idp/token` (see [`docs/project-overview.md`](../docs/project-overview.md)). Configure JWT via `.env` (`JWT_PUBLIC_KEY_SOURCE`, `MOCK_IDP_SIGNING_SECRET`, `JWKS_URI`).
