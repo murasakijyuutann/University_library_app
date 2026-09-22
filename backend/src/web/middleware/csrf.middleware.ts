@@ -5,22 +5,23 @@ import { NextFunction, Request, Response } from 'express';
 import { AppConfig } from '../../config/configuration';
 
 /**
- * Double-submit CSRF for HTML form posts (Phase 6.1). API routes under /api
- * are exempt — they use Bearer tokens / same-origin fetch with different rules.
+ * Double-submit CSRF for HTML form posts (Phase 6.1).
+ * JSON API (`/api`) and mock IdP (`/auth`) must never hit this check.
  */
 @Injectable()
 export class CsrfMiddleware implements NestMiddleware {
   constructor(private readonly configService: ConfigService) {}
 
   use(req: Request, res: Response, next: NextFunction): void {
-    const web = this.configService.get<AppConfig>('app')?.web;
-    const cookieName = web?.csrfCookieName ?? 'csrf_token';
-    const secure = web?.cookieSecure ?? false;
-
-    if (req.path.startsWith('/api') || req.path.startsWith('/auth/mock-idp')) {
+    const path = (req.originalUrl ?? req.url ?? req.path).split('?')[0];
+    if (path.startsWith('/api') || path.startsWith('/auth')) {
       next();
       return;
     }
+
+    const web = this.configService.get<AppConfig>('app')?.web;
+    const cookieName = web?.csrfCookieName ?? 'csrf_token';
+    const secure = web?.cookieSecure ?? false;
 
     let token = req.cookies?.[cookieName] as string | undefined;
     if (!token) {

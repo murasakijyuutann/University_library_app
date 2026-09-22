@@ -1,4 +1,5 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { MemberModule } from '../member/member.module';
 import { ResourceModule } from '../resource/resource.module';
 import { LoanModule } from '../loan/loan.module';
@@ -15,7 +16,6 @@ import { ResourcePresenter } from './presenters/resource.presenter';
 import { WebAuthGuard } from './guards/web-auth.guard';
 import { CsrfMiddleware } from './middleware/csrf.middleware';
 import { WebExceptionFilter } from './filters/web-exception.filter';
-import { APP_FILTER } from '@nestjs/core';
 
 /**
  * Phase 6 HTML portal — Handlebars MVC over the proven domain services.
@@ -46,6 +46,15 @@ import { APP_FILTER } from '@nestjs/core';
 })
 export class WebModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CsrfMiddleware).forRoutes('*');
+    // Apply only to portal HTML routes — never blanket `*` (that can strip
+    // req.path and accidentally CSRF-check /auth/mock-idp and /api).
+    consumer.apply(CsrfMiddleware).forRoutes(
+      HomeController,
+      WebAuthController,
+      WebSearchController,
+      WebResourceController,
+      WebThesisController,
+      { path: '/', method: RequestMethod.ALL },
+    );
   }
 }

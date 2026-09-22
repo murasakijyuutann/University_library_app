@@ -5,10 +5,10 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import * as express from 'express';
-import * as hbs from 'hbs';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/configuration';
+import { registerViewPartials } from './web/hbs-partials';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -20,10 +20,7 @@ async function bootstrap() {
   const publicPath = join(__dirname, 'web', 'public');
   app.setBaseViewsDir(viewsPath);
   app.setViewEngine('hbs');
-  hbs.registerPartials(join(viewsPath, 'partials'));
-  hbs.registerPartials(join(viewsPath, 'layouts'));
-  hbs.registerPartials(join(viewsPath, 'resources'));
-  hbs.registerPartials(join(viewsPath, 'search'));
+  registerViewPartials(viewsPath);
   app.useStaticAssets(publicPath);
 
   app.useGlobalPipes(

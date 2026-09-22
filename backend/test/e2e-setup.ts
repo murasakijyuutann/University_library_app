@@ -4,12 +4,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Member, MemberType, Role } from '@prisma/client';
 import * as cookieParser from 'cookie-parser';
 import * as express from 'express';
-import * as hbs from 'hbs';
 import { join } from 'path';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ResourceService } from '../src/resource/service/resource.service';
+import { registerViewPartials } from '../src/web/hbs-partials';
 import { IntegrationTestContext } from './integration/testcontainers-setup';
 
 export const E2E_MOCK_IDP_SECRET = 'e2e-test-mock-idp-secret';
@@ -71,10 +71,7 @@ export class E2eTestContext {
     const publicPath = join(__dirname, '..', 'src', 'web', 'public');
     app.setBaseViewsDir(viewsPath);
     app.setViewEngine('hbs');
-    hbs.registerPartials(join(viewsPath, 'partials'));
-    hbs.registerPartials(join(viewsPath, 'layouts'));
-    hbs.registerPartials(join(viewsPath, 'resources'));
-    hbs.registerPartials(join(viewsPath, 'search'));
+    registerViewPartials(viewsPath);
     app.useStaticAssets(publicPath);
 
     app.useGlobalPipes(
